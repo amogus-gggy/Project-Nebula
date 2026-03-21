@@ -24,7 +24,7 @@ jobs:
           python -m pip install build setuptools wheel "cython>=3.0.0"
 
       - name: Build release distributions
-        run: python -m build
+        run: python -m build --outdir dist/
 
       - name: Upload distributions
         uses: actions/upload-artifact@v4
