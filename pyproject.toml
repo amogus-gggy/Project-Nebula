@@ -5,12 +5,16 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "project-nebula"
 version = "0.1.2"
+
 authors = [
-    {name = "Your Name", email = "your@email.com"}
+    {name = "amogus-gggy"},
+    {name = "vxiddev"}
 ]
+
 description = "Simple ASGI micro framework for Python"
 readme = "README.md"
 requires-python = ">=3.10"
+
 dependencies = [
     "uvicorn>=0.30.0",
 ]
@@ -23,4 +27,4 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/nebula"
+Homepage = "https://github.com/amogus-gggy/project-nebula"
