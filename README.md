@@ -1,6 +1,9 @@
 # Nebula
 
-Simple ASGI micro framework for Python.
+Simple ASGI micro framework for Python. 
+
+#Update changelog:
+Added websockets(see examples folder)
 
 ## Installation
 
