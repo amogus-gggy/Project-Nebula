@@ -19,7 +19,7 @@ extensions = [
 
 setup(
     name="project-nebula",
-    version="0.1.0",
+    version="0.1.2",
     author="Your Name",
     author_email="your@email.com",
     description="Simple ASGI micro framework for Python",
