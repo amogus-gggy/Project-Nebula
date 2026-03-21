@@ -1,26 +1,11 @@
 import requests
-import time
-import subprocess
 import sys
+import websockets
+
+import asyncio
 
 BASE_URL = "http://127.0.0.1:8000"
-
-
-def start_server():
-    """Start the server in background."""
-    proc = subprocess.Popen(
-        [sys.executable, "examples/app.py"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    time.sleep(2)  # Wait for server to start
-    return proc
-
-
-def stop_server(proc):
-    """Stop the server."""
-    proc.terminate()
-    proc.wait()
+WS_URL = "ws://127.0.0.1:8000"
 
 
 def test_home():
@@ -101,10 +86,60 @@ def test_not_found():
     print("✓ 404 response OK")
 
 
-def main():
-    print("Starting server...")
-    proc = start_server()
+async def test_websocket_echo():
+    """Test WebSocket echo endpoint."""
+    ws = await websockets.connect(f"{WS_URL}/ws/echo")
 
+    try:
+        await ws.send("Hello")
+        result = await ws.recv()
+        assert result == "Echo: Hello"
+
+        await ws.send("World")
+        result = await ws.recv()
+        assert result == "Echo: World"
+
+        print("✓ WebSocket echo OK")
+    finally:
+        await ws.close()
+
+
+async def test_websocket_chat_with_room():
+    """Test WebSocket chat endpoint with room parameter."""
+    ws = await websockets.connect(f"{WS_URL}/ws/chat/general")
+    try:
+        # First message should be welcome (received immediately after accept)
+        result = await ws.recv()
+        assert result == "Welcome to room: general!"
+
+        # Send a message
+        await ws.send("Hi everyone!")
+        result = await ws.recv()
+        assert result == "[general] Hi everyone!"
+
+        print("✓ WebSocket chat with room OK")
+    finally:
+        await ws.close()
+
+
+async def test_websocket_json():
+    """Test WebSocket JSON endpoint."""
+    ws = await websockets.connect(f"{WS_URL}/ws/json")
+    try:
+        await ws.send('{"name": "test", "value": 42}')
+        result = await ws.recv()
+        import json
+
+        data = json.loads(result)
+        assert data["received"] == {"name": "test", "value": 42}
+        assert data["status"] == "processed"
+
+        print("✓ WebSocket JSON OK")
+    finally:
+        await ws.close()
+
+
+async def main():
     try:
         print("Running tests...\n")
 
@@ -116,19 +151,17 @@ def main():
         test_score_by_float()
         test_sync_handler()
         test_not_found()
+        await test_websocket_echo()
+        await test_websocket_chat_with_room()
+        await test_websocket_json()
 
         print("\n✅ All tests passed!")
+        return
 
-    except AssertionError as e:
-        print(f"\n❌ Test failed: {e}")
-        sys.exit(1)
     except requests.exceptions.ConnectionError:
         print("\n❌ Could not connect to server")
         sys.exit(1)
-    finally:
-        print("Stopping server...")
-        stop_server(proc)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

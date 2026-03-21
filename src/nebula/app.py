@@ -2,14 +2,11 @@ import asyncio
 import inspect
 import json
 from concurrent.futures import ThreadPoolExecutor
-from typing import Callable, Any, Dict, List, Optional
+from typing import Callable, Any, Dict, List, Optional, Iterable
 
 from .router import Router
-
-
-# Thread pool for sync handlers - shared instance for efficiency
+from .ws import WebSocket, WebSocketState
 _sync_executor = ThreadPoolExecutor(max_workers=10)
-
 
 class Request:
     """HTTP request object."""
@@ -25,9 +22,7 @@ class Request:
         self.method = scope.get("method", "GET")
         self.path = scope.get("path", "/")
         self.query_string = scope.get("query_string", b"").decode()
-        self.headers = {
-            k.decode(): v.decode() for k, v in scope.get("headers", [])
-        }
+        self.headers = {k.decode(): v.decode() for k, v in scope.get("headers", [])}
         self.path_params = path_params or {}
 
     async def json(self) -> Dict[str, Any]:
@@ -136,6 +131,9 @@ class HTMLResponse(Response):
         )
 
 
+
+
+
 class Nebula:
     """ASGI micro framework."""
 
@@ -170,39 +168,65 @@ class Nebula:
         """Decorator for DELETE route."""
         return self.route(path, methods=["DELETE"])
 
+    def websocket(self, path: str):
+        """Decorator for WebSocket route."""
+
+        def decorator(func: Callable) -> Callable:
+            self._router.add_websocket_route(path, func)
+            return func
+
+        return decorator
+
     async def __call__(
         self,
         scope: Dict[str, Any],
         receive: Callable,
         send: Callable,
     ) -> None:
-        if scope["type"] != "http":
-            return
+        if scope["type"] == "http":
+            path = scope.get("path", "/")
+            method = scope.get("method", "GET")
 
-        path = scope.get("path", "/")
-        method = scope.get("method", "GET")
+            # Find route and extract path params using Cython router
+            handler, path_params = self._router.find_handler(path, method)
 
-        # Find route and extract path params using Cython router
-        handler, path_params = self._router.find_handler(path, method)
-
-        if handler:
-            request = Request(scope, receive, path_params)
-            try:
-                # Check if handler is sync or async
-                if inspect.iscoroutinefunction(handler):
-                    response = await handler(request)
-                else:
-                    # Run sync handler in thread pool
-                    loop = asyncio.get_event_loop()
-                    response = await loop.run_in_executor(
-                        _sync_executor, _run_sync_handler, handler, request
-                    )
+            if handler:
+                request = Request(scope, receive, path_params)
+                try:
+                    # Check if handler is sync or async
+                    if inspect.iscoroutinefunction(handler):
+                        response = await handler(request)
+                    else:
+                        # Run sync handler in thread pool
+                        loop = asyncio.get_event_loop()
+                        response = await loop.run_in_executor(
+                            _sync_executor, _run_sync_handler, handler, request
+                        )
+                    await response(scope, receive, send)
+                except Exception as e:
+                    response = JSONResponse({"error": str(e)}, status_code=500)
+                    await response(scope, receive, send)
+            else:
+                response = JSONResponse({"error": "Not Found"}, status_code=404)
                 await response(scope, receive, send)
-            except Exception as e:
-                response = JSONResponse(
-                    {"error": str(e)}, status_code=500
-                )
-                await response(scope, receive, send)
-        else:
-            response = JSONResponse({"error": "Not Found"}, status_code=404)
-            await response(scope, receive, send)
+
+        elif scope["type"] == "websocket":
+            path = scope.get("path", "/")
+
+            # Find WebSocket handler using Cython router
+            handler, path_params = self._router.find_websocket_handler(path)
+
+            if handler:
+                websocket = WebSocket(scope, receive, send, path_params)
+                try:
+                    if inspect.iscoroutinefunction(handler):
+                        await handler(websocket)
+                    else:
+                        loop = asyncio.get_event_loop()
+                        await loop.run_in_executor(_sync_executor, handler, websocket)
+                except Exception as e:
+                    # Try to send close frame on error
+                    try:
+                        await websocket.close(code=1011, reason=str(e))
+                    except Exception:
+                        pass

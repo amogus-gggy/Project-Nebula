@@ -21,10 +21,12 @@ cdef class Router:
 
     cdef:
         dict routes
+        dict websocket_routes
         object _compiled_patterns
 
     def __init__(self):
         self.routes = {}
+        self.websocket_routes = {}
         self._compiled_patterns = {}
 
     cpdef add_route(self, str path, str method, object handler):
@@ -33,6 +35,10 @@ cdef class Router:
         if path_key not in self.routes:
             self.routes[path_key] = {}
         self.routes[path_key][method.upper()] = handler
+
+    cpdef add_websocket_route(self, str path, object handler):
+        """Add a WebSocket route to the router."""
+        self.websocket_routes[path] = handler
 
     cpdef tuple find_handler(self, str path, str method):
         """Find handler and path params for given path and method.
@@ -57,6 +63,27 @@ cdef class Router:
             if path_params is not None:
                 if method_upper in methods:
                     return (methods[method_upper], path_params)
+
+        return (None, None)
+
+    cpdef tuple find_websocket_handler(self, str path):
+        """Find WebSocket handler for given path.
+
+        Returns: (handler, path_params) or (None, None) if not found.
+        """
+        cdef:
+            object handler
+            dict path_params
+
+        # Exact match first
+        if path in self.websocket_routes:
+            return (self.websocket_routes[path], {})
+
+        # Pattern match
+        for route_path, handler in self.websocket_routes.items():
+            path_params = self._match_path(route_path, path)
+            if path_params is not None:
+                return (handler, path_params)
 
         return (None, None)
 
@@ -102,3 +129,7 @@ cdef class Router:
     cpdef list get_routes(self):
         """Get all registered routes."""
         return list(self.routes.keys())
+
+    cpdef list get_websocket_routes(self):
+        """Get all registered WebSocket routes."""
+        return list(self.websocket_routes.keys())

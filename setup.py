@@ -4,9 +4,7 @@ from setuptools import Extension, find_packages, setup
 from Cython.Build import cythonize
 
 if struct.calcsize("P") * 8 != 64:
-    raise RuntimeError(
-        "Nebula Cython extension must be built with 64-bit Python."
-    )
+    raise RuntimeError("Nebula Cython extension must be built with 64-bit Python.")
 
 
 extensions = [
@@ -19,7 +17,7 @@ extensions = [
 
 setup(
     name="project-nebula",
-    version="0.1.2",
+    version="0.1.4",
     author="Your Name",
     author_email="your@email.com",
     description="Simple ASGI micro framework for Python",
