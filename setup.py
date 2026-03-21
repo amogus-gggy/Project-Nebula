@@ -22,7 +22,6 @@ extensions = [
 ROOT = Path(__file__).resolve().parent
 CLEANUP_PATHS = [
     ROOT / "build",
-    ROOT / "dist",
     ROOT / "src" / "nebula.egg-info",
 ]
 
