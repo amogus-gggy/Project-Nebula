@@ -35,14 +35,13 @@ cdef class Router:
         self._ws_route_order = []
         self._pattern_cache = {}
 
-    cpdef add_route(self, str path, str method, object handler):
+    def add_route(self, str path, str method, object handler):
         """Add a route to the router."""
         cdef str method_upper = method.upper()
         cdef str path_key = path
         cdef dict methods
         cdef tuple pattern_info
         cdef bint has_params = False
-        cdef tuple item
 
         if path_key not in self.routes:
             self.routes[path_key] = {}
@@ -61,7 +60,7 @@ cdef class Router:
         methods = self.routes[path_key]
         methods[method_upper] = handler
 
-    cpdef add_websocket_route(self, str path, object handler):
+    def add_websocket_route(self, str path, object handler):
         """Add a WebSocket route to the router."""
         cdef tuple pattern_info
         cdef bint has_params = False
@@ -80,7 +79,7 @@ cdef class Router:
 
         self.websocket_routes[path] = handler
 
-    cpdef tuple find_handler(self, str path, str method):
+    def find_handler(self, str path, str method):
         """Find handler and path params for given path and method.
 
         Returns: (handler, path_params) or (None, None) if not found.
@@ -94,7 +93,7 @@ cdef class Router:
 
         # Exact match first (static routes)
         if path in self._static_routes:
-            methods = self.routes[path]
+           [path]
             if method_upper in methods:
                 return (methods[method_upper], {})
 
@@ -103,7 +102,7 @@ cdef class Router:
         cdef int i, n_routes = len(route_order)
 
         for i in range(n_routes):
-            route_path = route_path[i]
+            route_path = route_order[i]
             methods = self.routes[route_path]
             if method_upper not in methods:
                 continue
@@ -115,7 +114,7 @@ cdef class Router:
 
         return (None, None)
 
-    cpdef tuple find_websocket_handler(self, str path):
+    def find_websocket_handler(self, str path):
         """Find WebSocket handler for given path.
 
         Returns: (handler, path_params) or (None, None) if not found.
@@ -207,10 +206,10 @@ cdef class Router:
 
         return path_params if path_params else {}
 
-    cpdef list get_routes(self):
+    def get_routes(self):
         """Get all registered routes."""
         return list(self.routes.keys())
 
-    cpdef list get_websocket_routes(self):
+    def get_websocket_routes(self):
         """Get all registered WebSocket routes."""
         return list(self.websocket_routes.keys())
