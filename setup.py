@@ -8,7 +8,7 @@ from setuptools import Extension, find_packages, setup
 
 if struct.calcsize("P") * 8 != 64:
     raise RuntimeError(
-        "Nebula Cython extension must be built with 64-bit Python (win_amd64)."
+        "Nebula Cython extension must be built with 64-bit Python."
     )
 
 
