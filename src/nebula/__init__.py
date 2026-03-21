@@ -6,6 +6,8 @@ from .app import (
     HTMLResponse,
     WebSocket,
     WebSocketState,
+    BaseMiddleware,
+    Middleware
 )
 
 __version__ = "0.1.0"
@@ -17,4 +19,6 @@ __all__ = [
     "HTMLResponse",
     "WebSocket",
     "WebSocketState",
+    "BaseMiddleware",
+    "Middleware"
 ]
