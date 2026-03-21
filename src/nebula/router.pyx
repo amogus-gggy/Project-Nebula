@@ -22,22 +22,70 @@ cdef class Router:
     cdef:
         dict routes
         dict websocket_routes
-        object _compiled_patterns
+        dict _static_routes
+        dict _ws_static_routes
+        list _route_order
+        list _ws_route_order
+        dict _pattern_cache
 
     def __init__(self):
         self.routes = {}
         self.websocket_routes = {}
-        self._compiled_patterns = {}
+        self._static_routes = {}
+        self._ws_static_routes = {}
+        self._route_order = []
+        self._ws_route_order = []
+        self._pattern_cache = {}
 
     cpdef add_route(self, str path, str method, object handler):
         """Add a route to the router."""
-        cdef str path_key = path
+        cdef:
+            str method_upper = method.upper()
+            str path_key = path
+            dict methods
+            list pattern_info
+            bint has_params = False
+            tuple item
+
         if path_key not in self.routes:
             self.routes[path_key] = {}
-        self.routes[path_key][method.upper()] = handler
+            # Кэшируем информацию о паттерне при добавлении
+            pattern_info = self._compile_pattern(path_key)
+            self._pattern_cache[path_key] = pattern_info
+            # Проверяем, есть ли параметры в паттерне
+            for item in pattern_info[0]:
+                if item is not None:
+                    has_params = True
+                    break
+            # Разделяем статические и динамические маршруты
+            if not has_params:
+                self._static_routes[path_key] = True
+            else:
+                self._route_order.append(path_key)
+        
+        methods = self.routes[path_key]
+        methods[method_upper] = handler
 
     cpdef add_websocket_route(self, str path, object handler):
         """Add a WebSocket route to the router."""
+        cdef:
+            list pattern_info
+            bint has_params = False
+            tuple item
+        
+        if path not in self.websocket_routes:
+            pattern_info = self._compile_pattern(path)
+            self._pattern_cache[path] = pattern_info
+            # Проверяем, есть ли параметры в паттерне
+            for item in pattern_info[0]:
+                if item is not None:
+                    has_params = True
+                    break
+            if not has_params:
+                self._ws_static_routes[path] = True
+            else:
+                self._ws_route_order.append(path)
+        
         self.websocket_routes[path] = handler
 
     cpdef tuple find_handler(self, str path, str method):
@@ -50,19 +98,24 @@ cdef class Router:
             dict methods
             object handler
             dict path_params
+            str route_path
+            list pattern_info
 
-        # Exact match first (fastest path)
-        if path in self.routes:
+        # Exact match first (быстрая проверка статических маршрутов)
+        if path in self._static_routes:
             methods = self.routes[path]
             if method_upper in methods:
                 return (methods[method_upper], {})
 
-        # Pattern match
-        for route_path, methods in self.routes.items():
-            path_params = self._match_path(route_path, path)
+        # Pattern match (только по динамическим маршрутам)
+        for route_path in self._route_order:
+            methods = self.routes[route_path]
+            if method_upper not in methods:
+                continue
+            pattern_info = self._pattern_cache[route_path]
+            path_params = self._match_path_fast(pattern_info, path)
             if path_params is not None:
-                if method_upper in methods:
-                    return (methods[method_upper], path_params)
+                return (methods[method_upper], path_params)
 
         return (None, None)
 
@@ -74,55 +127,85 @@ cdef class Router:
         cdef:
             object handler
             dict path_params
+            str route_path
+            list pattern_info
 
         # Exact match first
-        if path in self.websocket_routes:
+        if path in self._ws_static_routes:
             return (self.websocket_routes[path], {})
 
         # Pattern match
-        for route_path, handler in self.websocket_routes.items():
-            path_params = self._match_path(route_path, path)
+        for route_path in self._ws_route_order:
+            pattern_info = self._pattern_cache[route_path]
+            path_params = self._match_path_fast(pattern_info, path)
             if path_params is not None:
-                return (handler, path_params)
+                return (self.websocket_routes[route_path], path_params)
 
         return (None, None)
 
-    cpdef dict _match_path(self, str pattern, str path):
-        """Match path against pattern and extract typed parameters."""
+    cdef list _compile_pattern(self, str pattern):
+        """Компилирует паттерн в оптимизированную структуру.
+        
+        Returns: [(param_name, converter) или None для статических частей]
+        """
         cdef:
             list pattern_parts = pattern.strip("/").split("/")
-            list path_parts = path.strip("/").split("/")
-            int i
-            str pattern_part, path_part
+            list compiled = []
+            str part
             object match
             str param_name, param_type
             object converter
 
-        if len(pattern_parts) != len(path_parts):
+        for part in pattern_parts:
+            match = PARAM_PATTERN.match(part)
+            if match:
+                param_name = match.group(1)
+                param_type = match.group(2) or "str"
+                
+                if param_type not in PATH_CONVERTERS:
+                    raise ValueError(f"Unknown path type: {param_type}")
+                
+                converter = PATH_CONVERTERS[param_type]
+                compiled.append((param_name, converter))
+            else:
+                compiled.append(None)  # Статическая часть
+        
+        return [compiled, pattern_parts]
+
+    cdef dict _match_path_fast(self, list pattern_info, str path):
+        """Быстрое сопоставление пути с предкомпилированным паттерном."""
+        cdef:
+            list compiled_pattern = pattern_info[0]
+            list pattern_parts = pattern_info[1]
+            list path_parts = path.strip("/").split("/")
+            int i, n
+            str path_part
+            tuple param_info
+            str param_name
+            object converter
+            dict path_params
+
+        n = len(compiled_pattern)
+        if len(path_parts) != n:
             return None
 
         path_params = {}
 
-        for i in range(len(pattern_parts)):
-            pattern_part = pattern_parts[i]
+        for i in range(n):
             path_part = path_parts[i]
-
-            # Check if this is a parameter placeholder
-            match = PARAM_PATTERN.match(pattern_part)
-            if match:
-                param_name = match.group(1)
-                param_type = match.group(2) or "str"
-
-                if param_type not in PATH_CONVERTERS:
-                    raise ValueError(f"Unknown path type: {param_type}")
-
-                converter = PATH_CONVERTERS[param_type]
+            param_info = compiled_pattern[i]
+            
+            if param_info is not None:
+                # Динамический параметр
+                param_name = param_info[0]
+                converter = param_info[1]
                 try:
                     path_params[param_name] = converter(path_part)
                 except (ValueError, TypeError):
-                    return None  # Type conversion failed
-            elif pattern_part != path_part:
-                return None  # Static parts don't match
+                    return None
+            elif pattern_parts[i] != path_part:
+                # Статическая часть не совпадает
+                return None
 
         return path_params if path_params else None
 
