@@ -77,10 +77,7 @@ async def websocket_json(ws: WebSocket):
     while True:
         data = await ws.receive_json()
         # Process and echo back with timestamp
-        await ws.send_json({
-            "received": data,
-            "status": "processed"
-        })
+        await ws.send_json({"received": data, "status": "processed"})
 
 
 # Simple WebSocket Chat with broadcast
@@ -155,25 +152,25 @@ async def websocket_chat_broadcast(ws: WebSocket):
     await ws.accept()
     active_connections.add(ws)
     print(f"[WS] Client connected. Total connections: {len(active_connections)}")
-    
+
     # Notify everyone about new user
-    await broadcast({
-        "type": "system",
-        "username": "System",
-        "message": f"New user connected! Total users: {len(active_connections)}"
-    })
-    
+    await broadcast(
+        {
+            "type": "system",
+            "username": "System",
+            "message": f"New user connected! Total users: {len(active_connections)}",
+        }
+    )
+
     try:
         while True:
             message = await ws.receive_json()
             print(f"[WS] Received message: {message}")
             if isinstance(message, dict) and "message" in message:
                 # Broadcast message to all connections (including sender)
-                await broadcast({
-                    "type": "chat",
-                    "username": "User",
-                    "message": message["message"]
-                })
+                await broadcast(
+                    {"type": "chat", "username": "User", "message": message["message"]}
+                )
     except Exception as e:
         print(f"[WS] Error: {e}")
     finally:
@@ -181,28 +178,31 @@ async def websocket_chat_broadcast(ws: WebSocket):
         print(f"[WS] Client disconnected. Total connections: {len(active_connections)}")
         # Notify everyone about user disconnect
         if active_connections:
-            await broadcast({
-                "type": "system",
-                "username": "System",
-                "message": f"User disconnected. Total users: {len(active_connections)}"
-            })
+            await broadcast(
+                {
+                    "type": "system",
+                    "username": "System",
+                    "message": f"User disconnected. Total users: {len(active_connections)}",
+                }
+            )
 
 
 async def broadcast(data: dict):
     """Broadcast message to all connected clients"""
     import json
+
     message = json.dumps(data)
     disconnected = set()
-    
+
     print(f"[WS] Broadcasting to {len(active_connections)} connections: {data}")
-    
+
     for conn in active_connections:
         try:
             await conn.send_text(message)
         except Exception as e:
             print(f"[WS] Failed to send to connection: {e}")
             disconnected.add(conn)
-    
+
     # Clean up disconnected clients
     for conn in disconnected:
         active_connections.discard(conn)

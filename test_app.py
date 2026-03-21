@@ -1,14 +1,9 @@
 import requests
-import time
-import subprocess
 import sys
 import websocket
 
 BASE_URL = "http://127.0.0.1:8000"
 WS_URL = "ws://127.0.0.1:8000"
-
-
-
 
 
 def test_home():
@@ -96,11 +91,11 @@ def test_websocket_echo():
         ws.send("Hello")
         result = ws.recv()
         assert result == "Echo: Hello"
-        
+
         ws.send("World")
         result = ws.recv()
         assert result == "Echo: World"
-        
+
         print("✓ WebSocket echo OK")
     finally:
         ws.close()
@@ -131,19 +126,17 @@ def test_websocket_json():
         ws.send('{"name": "test", "value": 42}')
         result = ws.recv()
         import json
+
         data = json.loads(result)
         assert data["received"] == {"name": "test", "value": 42}
         assert data["status"] == "processed"
-        
+
         print("✓ WebSocket JSON OK")
     finally:
         ws.close()
 
 
 def main():
-
-
-
     try:
         print("Running tests...\n")
 
@@ -161,13 +154,9 @@ def main():
 
         print("\n✅ All tests passed!")
 
-
     except requests.exceptions.ConnectionError:
         print("\n❌ Could not connect to server")
         sys.exit(1)
-
-
-
 
 
 if __name__ == "__main__":

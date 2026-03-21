@@ -3,7 +3,7 @@ import inspect
 import json
 from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
-from typing import Callable, Any, Dict, List, Optional, Union, Iterable
+from typing import Callable, Any, Dict, List, Optional, Iterable
 
 from .router import Router
 
@@ -14,6 +14,7 @@ _sync_executor = ThreadPoolExecutor(max_workers=10)
 
 class WebSocketState(Enum):
     """WebSocket connection state."""
+
     CONNECTING = 0
     CONNECTED = 1
     DISCONNECTED = 2
@@ -33,9 +34,7 @@ class Request:
         self.method = scope.get("method", "GET")
         self.path = scope.get("path", "/")
         self.query_string = scope.get("query_string", b"").decode()
-        self.headers = {
-            k.decode(): v.decode() for k, v in scope.get("headers", [])
-        }
+        self.headers = {k.decode(): v.decode() for k, v in scope.get("headers", [])}
         self.path_params = path_params or {}
 
     async def json(self) -> Dict[str, Any]:
@@ -158,9 +157,7 @@ class WebSocket:
         self._receive = receive
         self._send = send
         self.path = scope.get("path", "/")
-        self.headers = {
-            k.decode(): v.decode() for k, v in scope.get("headers", [])
-        }
+        self.headers = {k.decode(): v.decode() for k, v in scope.get("headers", [])}
         self.path_params = path_params or {}
         self._state = WebSocketState.CONNECTING
 
@@ -177,7 +174,9 @@ class WebSocket:
             message = await self._receive()
             message_type = message["type"]
             if message_type != "websocket.connect":
-                raise RuntimeError(f'Expected ASGI message "websocket.connect", but got {message_type!r}')
+                raise RuntimeError(
+                    f'Expected ASGI message "websocket.connect", but got {message_type!r}'
+                )
             # Stay in CONNECTING until the application explicitly accepts.
             # This mirrors Starlette/FastAPI semantics: the connect event is received,
             # but the handshake isn't complete until we send "websocket.accept".
@@ -193,7 +192,9 @@ class WebSocket:
                 self._state = WebSocketState.DISCONNECTED
             return message
         else:
-            raise RuntimeError('Cannot call "receive" once a disconnect message has been received.')
+            raise RuntimeError(
+                'Cannot call "receive" once a disconnect message has been received.'
+            )
 
     async def send(self, message: Dict[str, Any]) -> None:
         """
@@ -236,14 +237,20 @@ class WebSocket:
         if self._state == WebSocketState.CONNECTING:
             # If we haven't yet seen the 'connect' message, then wait for it first.
             await self.receive()
-        await self.send({"type": "websocket.accept", "subprotocol": subprotocol, "headers": headers})
+        await self.send(
+            {"type": "websocket.accept", "subprotocol": subprotocol, "headers": headers}
+        )
 
     def _raise_on_disconnect(self, message: Dict[str, Any]) -> None:
         if message["type"] == "websocket.disconnect":
-            raise RuntimeError(f"WebSocket disconnected with code {message.get('code', 1000)}")
+            raise RuntimeError(
+                f"WebSocket disconnected with code {message.get('code', 1000)}"
+            )
 
     async def close(self, code: int = 1000, reason: Optional[str] = None) -> None:
-        await self.send({"type": "websocket.close", "code": code, "reason": reason or ""})
+        await self.send(
+            {"type": "websocket.close", "code": code, "reason": reason or ""}
+        )
 
     async def send_text(self, data: str) -> None:
         """Send text data over the WebSocket."""
@@ -266,15 +273,18 @@ class WebSocket:
     async def receive_text(self) -> str:
         """Receive text data from the WebSocket."""
         if self._state != WebSocketState.CONNECTED:
-            raise RuntimeError('WebSocket is not connected. Need to call "accept" first.')
+            raise RuntimeError(
+                'WebSocket is not connected. Need to call "accept" first.'
+            )
 
         while True:
             message = await self._receive()
             if message["type"] == "websocket.disconnect":
                 self._state = WebSocketState.DISCONNECTED
-                raise RuntimeError(f"WebSocket disconnected with code {message.get('code', 1000)}")
+                raise RuntimeError(
+                    f"WebSocket disconnected with code {message.get('code', 1000)}"
+                )
             elif message["type"] == "websocket.receive":
-
                 text = message.get("text")
                 if text:
                     return text
@@ -282,17 +292,19 @@ class WebSocket:
                 continue
 
     async def receive_bytes(self) -> bytes:
-
         if self._state != WebSocketState.CONNECTED:
-            raise RuntimeError('WebSocket is not connected. Need to call "accept" first.')
+            raise RuntimeError(
+                'WebSocket is not connected. Need to call "accept" first.'
+            )
 
         while True:
             message = await self._receive()
             if message["type"] == "websocket.disconnect":
                 self._state = WebSocketState.DISCONNECTED
-                raise RuntimeError(f"WebSocket disconnected with code {message.get('code', 1000)}")
+                raise RuntimeError(
+                    f"WebSocket disconnected with code {message.get('code', 1000)}"
+                )
             elif message["type"] == "websocket.receive":
-                # Аналогичная фильтрация для bytes
                 data = message.get("bytes")
                 if data:
                     return data
@@ -353,9 +365,11 @@ class Nebula:
 
     def websocket(self, path: str):
         """Decorator for WebSocket route."""
+
         def decorator(func: Callable) -> Callable:
             self._router.add_websocket_route(path, func)
             return func
+
         return decorator
 
     async def __call__(
@@ -385,9 +399,7 @@ class Nebula:
                         )
                     await response(scope, receive, send)
                 except Exception as e:
-                    response = JSONResponse(
-                        {"error": str(e)}, status_code=500
-                    )
+                    response = JSONResponse({"error": str(e)}, status_code=500)
                     await response(scope, receive, send)
             else:
                 response = JSONResponse({"error": "Not Found"}, status_code=404)
@@ -406,9 +418,7 @@ class Nebula:
                         await handler(websocket)
                     else:
                         loop = asyncio.get_event_loop()
-                        await loop.run_in_executor(
-                            _sync_executor, handler, websocket
-                        )
+                        await loop.run_in_executor(_sync_executor, handler, websocket)
                 except Exception as e:
                     # Try to send close frame on error
                     try:
