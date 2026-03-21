@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel", "cython>=3.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "nebula"
+name = "project-nebula"
 version = "0.1.0"
 authors = [
     {name = "Your Name", email = "your@email.com"}

@@ -5,7 +5,7 @@ Simple ASGI micro framework for Python.
 ## Installation
 
 ```bash
-pip install -e .
+pip install project-nebula
 ```
 
 ## Usage
