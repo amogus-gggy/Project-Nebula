@@ -1,113 +1,78 @@
 import asyncio
 import inspect
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Callable, Any, Dict, List, Optional, Iterable
+from typing import Callable, Any, Dict, List, Optional
 
 from .router import Router
 from .ws import WebSocket, WebSocketState
+
 _sync_executor = ThreadPoolExecutor(max_workers=10)
 
 class Request:
-    """HTTP request object."""
-
-    def __init__(
-        self,
-        scope: Dict[str, Any],
-        receive: Callable,
-        path_params: Optional[Dict[str, Any]] = None,
-    ):
+    def __init__(self, scope: Dict[str, Any], receive: Callable, path_params=None):
         self.scope = scope
         self.receive = receive
         self.method = scope.get("method", "GET")
         self.path = scope.get("path", "/")
         self.query_string = scope.get("query_string", b"").decode()
-        self.headers = {k.decode(): v.decode() for k, v in scope.get("headers", [])}
+        self.headers = {
+            k.decode(): v.decode()
+            for k, v in scope.get("headers", [])
+        }
         self.path_params = path_params or {}
 
-    async def json(self) -> Dict[str, Any]:
-        """Parse request body as JSON."""
-        body = await self._get_body()
-        return json.loads(body)
-
-    async def text(self) -> str:
-        """Get request body as text."""
-        return await self._get_body()
-
-    async def _get_body(self) -> str:
-        """Read request body."""
+    async def _get_body(self):
         messages = []
         while True:
             message = await self.receive()
             messages.append(message)
             if not message.get("more_body", False):
                 break
-        return b"".join(msg.get("body", b"") for msg in messages).decode()
+        return b"".join(m.get("body", b"") for m in messages).decode()
+
+    async def json(self):
+        return json.loads(await self._get_body())
+
+    async def text(self):
+        return await self._get_body()
+
 
 
 class Response:
-    """Base HTTP response."""
-
-    def __init__(
-        self,
-        content: str = "",
-        status_code: int = 200,
-        headers: Optional[Dict[str, str]] = None,
-        media_type: str = "text/plain",
-    ):
+    def __init__(self, content="", status_code=200, headers=None, media_type="text/plain"):
         self.content = content
         self.status_code = status_code
         self.headers = headers or {}
         self.media_type = media_type
 
-    async def __call__(
-        self,
-        scope: Dict[str, Any],
-        receive: Callable,
-        send: Callable,
-    ) -> None:
-        await send(
-            {
-                "type": "http.response.start",
-                "status": self.status_code,
-                "headers": self._encode_headers(),
-            }
-        )
-        await send(
-            {
-                "type": "http.response.body",
-                "body": self._encode_content(),
-            }
-        )
+    async def __call__(self, scope, receive, send):
+        await send({
+            "type": "http.response.start",
+            "status": self.status_code,
+            "headers": self._encode_headers(),
+        })
 
-    def _encode_headers(self) -> List[tuple]:
+        await send({
+            "type": "http.response.body",
+            "body": self._encode_body(),
+        })
+
+    def _encode_headers(self):
         headers = [(b"content-type", self.media_type.encode())]
-        for key, value in self.headers.items():
-            headers.append((key.encode(), value.encode()))
+        for k, v in self.headers.items():
+            headers.append((k.encode(), v.encode()))
         return headers
 
-    def _encode_content(self) -> bytes:
-        if isinstance(self.content, str):
-            return self.content.encode()
-        return self.content
-
-
-def _run_sync_handler(handler: Callable, request: Request) -> Any:
-    """Run synchronous handler in thread pool."""
-    return handler(request)
+    def _encode_body(self):
+        return self.content.encode() if isinstance(self.content, str) else self.content
 
 
 class JSONResponse(Response):
-    """JSON response."""
-
-    def __init__(
-        self,
-        content: Any,
-        status_code: int = 200,
-        headers: Optional[Dict[str, str]] = None,
-    ):
+    def __init__(self, content, status_code=200, headers=None):
         super().__init__(
-            content=json.dumps(content),
+            json.dumps(content),
             status_code=status_code,
             headers=headers,
             media_type="application/json",
@@ -115,16 +80,9 @@ class JSONResponse(Response):
 
 
 class HTMLResponse(Response):
-    """HTML response."""
-
-    def __init__(
-        self,
-        content: str,
-        status_code: int = 200,
-        headers: Optional[Dict[str, str]] = None,
-    ):
+    def __init__(self, content, status_code=200, headers=None):
         super().__init__(
-            content=content,
+            content,
             status_code=status_code,
             headers=headers,
             media_type="text/html; charset=utf-8",
@@ -132,101 +90,120 @@ class HTMLResponse(Response):
 
 
 
+class BaseMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        await self.app(scope, receive, send)
+
+
+class Middleware:
+    def __init__(self, middleware_cls: type, **options):
+        self.middleware_cls = middleware_cls
+        self.options = options
+
+    def build(self, app):
+        return self.middleware_cls(app, **self.options)
+
+
+ASGIApp = Callable[[Dict, Callable, Callable], Any]
+
 
 
 class Nebula:
-    """ASGI micro framework."""
-
-    def __init__(self):
+    def __init__(self, middleware: List[Middleware] = None):
         self._router = Router()
+        self._middlewares = middleware or []
 
-    def route(self, path: str, methods: List[str] = None):
-        """Decorator to register a route."""
-        if methods is None:
-            methods = ["GET"]
+        self._core = self._build_core()
+        self._app = self._build_middlewares(self._core)
 
-        def decorator(func: Callable) -> Callable:
-            for method in methods:
-                self._router.add_route(path, method.upper(), func)
+
+    def route(self, path, methods=None):
+        methods = methods or ["GET"]
+
+        def decorator(func):
+            for m in methods:
+                self._router.add_route(path, m.upper(), func)
             return func
 
         return decorator
 
-    def get(self, path: str):
-        """Decorator for GET route."""
-        return self.route(path, methods=["GET"])
+    def get(self, path): return self.route(path, ["GET"])
+    def post(self, path): return self.route(path, ["POST"])
+    def put(self, path): return self.route(path, ["PUT"])
+    def delete(self, path): return self.route(path, ["DELETE"])
 
-    def post(self, path: str):
-        """Decorator for POST route."""
-        return self.route(path, methods=["POST"])
-
-    def put(self, path: str):
-        """Decorator for PUT route."""
-        return self.route(path, methods=["PUT"])
-
-    def delete(self, path: str):
-        """Decorator for DELETE route."""
-        return self.route(path, methods=["DELETE"])
-
-    def websocket(self, path: str):
-        """Decorator for WebSocket route."""
-
-        def decorator(func: Callable) -> Callable:
+    def websocket(self, path):
+        def decorator(func):
             self._router.add_websocket_route(path, func)
             return func
 
         return decorator
 
-    async def __call__(
-        self,
-        scope: Dict[str, Any],
-        receive: Callable,
-        send: Callable,
-    ) -> None:
-        if scope["type"] == "http":
-            path = scope.get("path", "/")
-            method = scope.get("method", "GET")
 
-            # Find route and extract path params using Cython router
-            handler, path_params = self._router.find_handler(path, method)
+    def _build_core(self):
+        async def app(scope, receive, send):
+            if scope["type"] == "http":
+                return await self._handle_http(scope, receive, send)
+            elif scope["type"] == "websocket":
+                return await self._handle_ws(scope, receive, send)
 
-            if handler:
-                request = Request(scope, receive, path_params)
-                try:
-                    # Check if handler is sync or async
-                    if inspect.iscoroutinefunction(handler):
-                        response = await handler(request)
-                    else:
-                        # Run sync handler in thread pool
-                        loop = asyncio.get_event_loop()
-                        response = await loop.run_in_executor(
-                            _sync_executor, _run_sync_handler, handler, request
-                        )
-                    await response(scope, receive, send)
-                except Exception as e:
-                    response = JSONResponse({"error": str(e)}, status_code=500)
-                    await response(scope, receive, send)
+        return app
+
+    def _build_middlewares(self, app: ASGIApp) -> ASGIApp:
+        for mw in reversed(self._middlewares):
+            app = mw.build(app)
+        return app
+
+    async def _handle_http(self, scope, receive, send):
+        path = scope.get("path", "/")
+        method = scope.get("method", "GET")
+
+        handler, params = self._router.find_handler(path, method)
+
+        if not handler:
+            return await JSONResponse({"error": "Not Found"}, 404)(scope, receive, send)
+
+        request = Request(scope, receive, params)
+        
+        try:
+            if inspect.iscoroutinefunction(handler):
+                response = await handler(request)
             else:
-                response = JSONResponse({"error": "Not Found"}, status_code=404)
-                await response(scope, receive, send)
+                loop = asyncio.get_event_loop()
+                response = await loop.run_in_executor(
+                    _sync_executor,
+                    lambda: handler(request)
+                )
 
-        elif scope["type"] == "websocket":
-            path = scope.get("path", "/")
+            await response(scope, receive, send)
+        except Exception as e:
+            await JSONResponse({"error": str(e)}, 500)(scope, receive, send)
 
-            # Find WebSocket handler using Cython router
-            handler, path_params = self._router.find_websocket_handler(path)
+    async def _handle_ws(self, scope, receive, send):
+        path = scope.get("path", "/")
 
-            if handler:
-                websocket = WebSocket(scope, receive, send, path_params)
-                try:
-                    if inspect.iscoroutinefunction(handler):
-                        await handler(websocket)
-                    else:
-                        loop = asyncio.get_event_loop()
-                        await loop.run_in_executor(_sync_executor, handler, websocket)
-                except Exception as e:
-                    # Try to send close frame on error
-                    try:
-                        await websocket.close(code=1011, reason=str(e))
-                    except Exception:
-                        pass
+        handler, params = self._router.find_websocket_handler(path)
+        websocket = WebSocket(scope, receive, send, params)
+
+        if not handler:
+            await websocket.close(1000)
+            return
+
+        try:
+            if inspect.iscoroutinefunction(handler):
+                await handler(websocket)
+            else:
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(_sync_executor, handler, websocket)
+
+        except Exception as e:
+            try:
+                await websocket.close(1011, str(e))
+            except Exception:
+                pass
+
+    async def __call__(self, scope, receive, send):
+        return await self._app(scope, receive, send)
