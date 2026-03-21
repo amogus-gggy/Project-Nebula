@@ -20,6 +20,20 @@ extensions = [
 setup(
     name="project-nebula",
     version="0.1.0",
+    author="Your Name",
+    author_email="your@email.com",
+    description="Simple ASGI micro framework for Python",
+    long_description=open("README.md", encoding="utf-8").read(),
+    long_description_content_type="text/markdown",
+    url="https://github.com/amogus-gggy/Project-Nebula",
+    project_urls={
+        "Homepage": "https://github.com/amogus-gggy/Project-Nebula",
+    },
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
+    ],
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     ext_modules=cythonize(
@@ -30,4 +44,8 @@ setup(
             "wraparound": False,
         },
     ),
+    python_requires=">=3.10",
+    install_requires=[
+        "uvicorn>=0.30.0",
+    ],
 )
