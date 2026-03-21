@@ -14,6 +14,7 @@
   - [WebSocket](#websocket)
 - [Routing](#routing)
 - [WebSocket](#websocket-1)
+- [Middleware](#middleware)
 - [Examples](#examples)
 - [Testing](#testing)
 - [Development](#development)
@@ -315,6 +316,54 @@ async def websocket_json(ws: WebSocket):
 
 ---
 
+## Middleware
+
+Nebula has middleware support:
+
+```python
+class Middleware:
+    def __init__(self, middleware_cls: type, **options):
+        self.middleware_cls = middleware_cls
+        self.options = options
+
+    def build(self, app):
+        return self.middleware_cls(app, **self.options)
+```
+
+where `self.middleware_cls` is a class which inherits from BaseMiddleware:
+
+```python
+class BaseMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        await self.app(scope, receive, send)
+```
+
+example middleware:
+
+```python
+class TimingMiddleware(BaseMiddleware):
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "lifespan":
+            return await self.app(scope, receive, send)
+
+        start = time.time()
+        await self.app(scope, receive, send)
+        print(f"[TIME] {scope.get('path')} took {time.time() - start:.4f}s")
+```
+
+to use it:
+
+```python
+app: Nebula = Nebula(middleware=[
+    Middleware(TimingMiddleware)
+])
+```
+
+---
+
 ## Examples
 
 ### Full Application
@@ -401,6 +450,7 @@ Project-Nebula/
 │       └── ws.py         # WebSocket support
 ├── examples/
 │   └── app.py            # Usage examples
+|   └── basic.py
 ├── test_app.py           # Tests
 ├── pyproject.toml        # Build configuration
 └── setup.py              # Setup script
