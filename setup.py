@@ -1,10 +1,7 @@
 import struct
-import atexit
-import shutil
-from pathlib import Path
+from setuptools import Extension, find_packages, setup
 
 from Cython.Build import cythonize
-from setuptools import Extension, find_packages, setup
 
 if struct.calcsize("P") * 8 != 64:
     raise RuntimeError(
@@ -18,23 +15,6 @@ extensions = [
         ["src/nebula/router.pyx"],
     ),
 ]
-
-ROOT = Path(__file__).resolve().parent
-CLEANUP_PATHS = [
-    ROOT / "build",
-    ROOT / "src" / "nebula.egg-info",
-]
-
-
-def _cleanup_build_artifacts() -> None:
-    for path in CLEANUP_PATHS:
-        if path.exists():
-            shutil.rmtree(path, ignore_errors=True)
-    for wheel_file in ROOT.glob("*.whl"):
-        wheel_file.unlink(missing_ok=True)
-
-
-atexit.register(_cleanup_build_artifacts)
 
 
 setup(
