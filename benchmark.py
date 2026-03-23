@@ -16,6 +16,9 @@ ROUTES = [
     ("GET", "/api/score/{value}"),
     ("GET", "/api/sync"),
     ("GET", "/chat"),
+    ("GET", "/api/text"),
+
+    ("/template")
 ]
 
 # Генерация параметров
@@ -33,7 +36,9 @@ async def worker(session, duration, stats):
     end_time = time.time() + duration
 
     while time.time() < end_time:
-        method, path = random.choice(ROUTES)
+        route = random.choice(ROUTES)
+        method = route[0] if len(route) > 1 else "GET"
+        path = route[1] if len(route) > 1 else route[0]
         url = BASE_URL + build_path(path)
 
         start = time.perf_counter()

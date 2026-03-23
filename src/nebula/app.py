@@ -1,12 +1,14 @@
 import asyncio
 import inspect
+import os
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Optional
+from typing import List, Optional, Dict, Any, Union
+from pathlib import Path
 
 from .router import Router
 from .ws import WebSocket
 from .request import Request
-from .responses import JSONResponse
+from .responses import JSONResponse, FileResponse, PlainTextResponse
 from .middleware import Middleware, ASGIApp
 
 _sync_executor = ThreadPoolExecutor(max_workers=10)
@@ -16,6 +18,8 @@ class Nebula:
     def __init__(self, middleware: List[Middleware] = None):
         self._router = Router()
         self._middlewares = middleware or []
+        self._mounted_apps: Dict[str, Any] = {}
+        self._static_dirs: Dict[str, str] = {}
 
         self._core = self._build_core()
         self._app = self._build_middlewares(self._core)
@@ -50,6 +54,33 @@ class Nebula:
 
         return decorator
 
+    def mount(self, path: str, app: Any = None, directory: Union[str, os.PathLike] = None):
+        """
+        Подключить внешнее ASGI-приложение или директорию со статическими файлами.
+        
+        Args:
+            path: Префикс пути (например, "/static" или "/api")
+            app: ASGI-приложение для монтирования
+            directory: Путь к директории со статическими файлами
+        """
+        if app is not None:
+            self._mounted_apps[path] = app
+        elif directory is not None:
+            self._static_dirs[path] = str(directory)
+
+    def run(self, host: str = "127.0.0.1", port: int = 8000, reload: bool = False, **kwargs):
+        """
+        Запустить сервер uvicorn.
+        
+        Args:
+            host: Хост для прослушивания
+            port: Порт для прослушивания
+            reload: Авто-перезагрузка при изменении файлов
+            **kwargs: Дополнительные аргументы для uvicorn.run()
+        """
+        import uvicorn
+        uvicorn.run(self, host=host, port=port, reload=reload, **kwargs)
+
     def _build_core(self):
         async def app(scope, receive, send):
             if scope["type"] == "http":
@@ -67,6 +98,29 @@ class Nebula:
     async def _handle_http(self, scope, receive, send):
         path = scope.get("path", "/")
         method = scope.get("method", "GET")
+
+        # Проверка смонтированных приложений
+        for mount_path, mounted_app in self._mounted_apps.items():
+            if path.startswith(mount_path):
+                scope["path"] = path[len(mount_path):] or "/"
+                return await mounted_app(scope, receive, send)
+
+        # Проверка статических директорий
+        for mount_path, directory in self._static_dirs.items():
+            if path.startswith(mount_path):
+                relative_path = path[len(mount_path):].lstrip("/")
+                file_path = os.path.join(directory, relative_path)
+                
+                # Защита от выхода за пределы директории
+                abs_directory = os.path.abspath(directory)
+                abs_file = os.path.abspath(file_path)
+                
+                if abs_file.startswith(abs_directory) and os.path.isfile(abs_file):
+                    response = FileResponse(file_path)
+                    return await response(scope, receive, send)
+                else:
+                    response = JSONResponse({"error": "Not Found"}, 404)
+                    return await response(scope, receive, send)
 
         handler, params = self._router.find_handler(path, method)
 

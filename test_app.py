@@ -107,6 +107,49 @@ def test_random_sync():
     print(f"  Results: {results}")
 
 
+def test_plain_text_response():
+    """Test PlainTextResponse endpoint."""
+    resp = requests.get(f"{BASE_URL}/api/text")
+    assert resp.status_code == 200
+    assert resp.text == "This is a plain text response"
+    assert "text/plain" in resp.headers["Content-Type"]
+    print("✓ PlainTextResponse OK")
+
+
+def test_streaming_response():
+    """Test StreamingResponse endpoint."""
+    resp = requests.get(f"{BASE_URL}/api/stream")
+    assert resp.status_code == 200
+    expected = "".join([f"Line {i}\n" for i in range(10)])
+    assert resp.text == expected
+    print("✓ StreamingResponse OK")
+
+
+def test_redirect_response():
+    """Test RedirectResponse endpoint."""
+    resp = requests.get(f"{BASE_URL}/api/redirect", allow_redirects=False)
+    assert resp.status_code in [307, 301, 302]
+    assert resp.headers["Location"] == "https://example.com"
+    print("✓ RedirectResponse OK")
+
+
+def test_template_response():
+    """Test Jinja2 template response."""
+    resp = requests.get(f"{BASE_URL}/template")
+    assert resp.status_code == 200
+    assert "Nebula Templates" in resp.text
+    assert "text/html" in resp.headers["Content-Type"]
+    print("✓ TemplateResponse OK")
+
+
+def test_static_file():
+    """Test static file serving."""
+    resp = requests.get(f"{BASE_URL}/static/style.css")
+    assert resp.status_code == 200
+    assert "text/css" in resp.headers["Content-Type"] or "text/plain" in resp.headers["Content-Type"]
+    print("✓ Static file OK")
+
+
 def test_not_found():
     """Test 404 response."""
     resp = requests.get(f"{BASE_URL}/nonexistent")
@@ -173,6 +216,7 @@ async def main():
     try:
         print("Running tests...\n")
 
+        # HTTP tests
         test_home()
         test_hello()
         test_echo()
@@ -182,7 +226,18 @@ async def main():
         test_sync_handler()
         test_random_async()
         test_random_sync()
+        
+        # New response types tests
+        test_plain_text_response()
+        test_streaming_response()
+        test_redirect_response()
+        test_template_response()
+        test_static_file()
+        
+        # Error handling
         test_not_found()
+        
+        # WebSocket tests
         await test_websocket_echo()
         await test_websocket_chat_with_room()
         await test_websocket_json()

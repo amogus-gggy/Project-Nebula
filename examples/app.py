@@ -1,7 +1,28 @@
-from nebula import Nebula, JSONResponse, HTMLResponse, WebSocket
+from nebula import (
+    Nebula,
+    JSONResponse,
+    HTMLResponse,
+    WebSocket,
+    PlainTextResponse,
+    StreamingResponse,
+    FileResponse,
+    RedirectResponse,
+    Jinja2Templates,
+)
 import random
+import os
 
 app = Nebula()
+
+# Mount static files directory
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+os.makedirs(static_dir, exist_ok=True)
+app.mount("/static", directory=static_dir)
+
+# Setup templates
+templates_dir = os.path.join(os.path.dirname(__file__), "templates")
+os.makedirs(templates_dir, exist_ok=True)
+templates = Jinja2Templates(directory=templates_dir)
 
 
 @app.get("/")
@@ -222,7 +243,37 @@ async def broadcast(data: dict):
         active_connections.discard(conn)
 
 
-if __name__ == "__main__":
-    import uvicorn
+# New response types examples
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+@app.get("/api/text")
+async def text_response(request):
+    """PlainTextResponse example."""
+    return PlainTextResponse("This is a plain text response")
+
+
+@app.get("/api/stream")
+async def stream_response(request):
+    """StreamingResponse example."""
+    async def generate():
+        for i in range(10):
+            yield f"Line {i}\n"
+    return StreamingResponse(generate(), media_type="text/plain")
+
+
+@app.get("/api/redirect")
+async def redirect_response(request):
+    """RedirectResponse example."""
+    return RedirectResponse("https://example.com")
+
+
+@app.get("/template")
+async def template_response(request):
+    """Jinja2 template example."""
+    return templates.TemplateResponse(
+        "index.html",
+        {"request": request, "title": "Nebula Templates", "user": "Guest"}
+    )
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000)
