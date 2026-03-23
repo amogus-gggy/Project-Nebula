@@ -275,5 +275,42 @@ async def template_response(request):
     )
 
 
+# Additional non-blocking endpoints for benchmark
+
+@app.get("/api/ping")
+async def ping(request):
+    """Simple ping endpoint."""
+    return JSONResponse({"status": "pong"})
+
+
+@app.get("/api/status")
+async def status(request):
+    """Status endpoint."""
+    return JSONResponse({"healthy": True, "version": "0.1.0"})
+
+
+@app.post("/api/data")
+async def post_data(request):
+    """POST data endpoint."""
+    data = await request.json()
+    return JSONResponse({"received": True, "keys": list(data.keys())})
+
+
+@app.get("/api/sum/{a:int}/{b:int}")
+async def sum_numbers(request):
+    """Sum two numbers."""
+    a = request.path_params["a"]
+    b = request.path_params["b"]
+    return JSONResponse({"a": a, "b": b, "sum": a + b})
+
+
+@app.get("/api/multiply/{x:float}/{y:float}")
+async def multiply(request):
+    """Multiply two floats."""
+    x = request.path_params["x"]
+    y = request.path_params["y"]
+    return JSONResponse({"x": x, "y": y, "result": x * y})
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)
