@@ -102,19 +102,20 @@ class Nebula:
         # Проверка смонтированных приложений
         for mount_path, mounted_app in self._mounted_apps.items():
             if path.startswith(mount_path):
-                scope["path"] = path[len(mount_path):] or "/"
-                return await mounted_app(scope, receive, send)
+                new_scope = dict(scope)  # shallow copy to avoid mutation
+                new_scope["path"] = path[len(mount_path):] or "/"
+                return await mounted_app(new_scope, receive, send)
 
         # Проверка статических директорий
         for mount_path, directory in self._static_dirs.items():
             if path.startswith(mount_path):
                 relative_path = path[len(mount_path):].lstrip("/")
                 file_path = os.path.join(directory, relative_path)
-                
-                # Защита от выхода за пределы директории
-                abs_directory = os.path.abspath(directory)
-                abs_file = os.path.abspath(file_path)
-                
+
+                # Защита от выхода за пределы директории (используем realpath для разрешения symlink)
+                abs_directory = os.path.realpath(directory)
+                abs_file = os.path.realpath(file_path)
+
                 if abs_file.startswith(abs_directory) and os.path.isfile(abs_file):
                     response = FileResponse(file_path)
                     return await response(scope, receive, send)

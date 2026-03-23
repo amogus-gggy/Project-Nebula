@@ -76,23 +76,23 @@ class TemplateResponse(HTMLResponse):
     """
     Ответ с отрендеренным HTML-шаблоном.
     """
-    
+
     def __init__(
         self,
         name: str,
-        context: Dict[str, Any],
-        templates: Jinja2Templates,
+        context: Optional[Dict[str, Any]] = None,
+        templates: Optional[Jinja2Templates] = None,
         status_code: int = 200,
         headers: Optional[Dict[str, str]] = None,
     ):
         self.name = name
-        self.context = context
+        self.context = context or {}
         self.templates = templates
-        
+
         # Рендерим шаблон
         template = templates.env.get_template(name)
-        content = template.render(**context)
-        
+        content = template.render(**self.context)
+
         super().__init__(
             content=content,
             status_code=status_code,

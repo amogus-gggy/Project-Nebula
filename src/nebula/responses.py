@@ -7,7 +7,17 @@ from typing import Any, Dict, List, Optional, Union, AsyncIterator, Callable
 import anyio
 
 
-class Response:
+class _HeadersMixin:
+    """Mixin for encoding HTTP headers."""
+
+    def _encode_headers(self, media_type: str, headers: dict) -> List[tuple]:
+        result = [(b"content-type", media_type.encode())]
+        for k, v in headers.items():
+            result.append((k.encode(), v.encode()))
+        return result
+
+
+class Response(_HeadersMixin):
     def __init__(self, content="", status_code=200, headers=None, media_type="text/plain"):
         self.content = content
         self.status_code = status_code
@@ -30,10 +40,7 @@ class Response:
 
     def _get_encoded_headers(self):
         if self._encoded_headers is None:
-            headers = [(b"content-type", self.media_type.encode())]
-            for k, v in self.headers.items():
-                headers.append((k.encode(), v.encode()))
-            self._encoded_headers = headers
+            self._encoded_headers = self._encode_headers(self.media_type, self.headers)
         return self._encoded_headers
 
     def _get_encoded_body(self):
@@ -86,7 +93,7 @@ class RedirectResponse(Response):
         )
 
 
-class StreamingResponse(Response):
+class StreamingResponse(_HeadersMixin):
     """Потоковый ответ для передачи данных частями."""
     def __init__(
         self,
@@ -130,10 +137,7 @@ class StreamingResponse(Response):
 
     def _get_encoded_headers(self):
         if self._encoded_headers is None:
-            headers = [(b"content-type", self.media_type.encode())]
-            for k, v in self.headers.items():
-                headers.append((k.encode(), v.encode()))
-            self._encoded_headers = headers
+            self._encoded_headers = self._encode_headers(self.media_type, self.headers)
         return self._encoded_headers
 
 
@@ -186,17 +190,66 @@ class FileResponse(Response):
 
     async def __call__(self, scope, receive, send):
         import email.utils
-        
+
+        # Получаем размер файла и информацию о нём
+        try:
+            stat_result = await anyio.to_thread.run_sync(os.stat, self.path)
+        except FileNotFoundError:
+            # Файл не найден - возвращаем 404
+            response = PlainTextResponse("Not Found", status_code=404)
+            return await response(scope, receive, send)
+        except PermissionError:
+            # Нет доступа - возвращаем 403
+            response = PlainTextResponse("Forbidden", status_code=403)
+            return await response(scope, receive, send)
+
+        file_size = stat_result.st_size
+        last_modified = stat_result.st_mtime
+
+        # Парсинг Range заголовка
+        start = 0
+        end = None
+        range_header = None
+
+        for key, value in scope.get("headers", []):
+            if key.decode().lower() == "range":
+                range_header = value.decode()
+                break
+
+        if range_header and range_header.startswith("bytes="):
+            try:
+                range_val = range_header[6:]  # убираем "bytes="
+                start_str, end_str = range_val.split("-", 1)
+                start = int(start_str) if start_str else 0
+                end = int(end_str) if end_str else file_size - 1
+                # Нормализуем end
+                if end >= file_size:
+                    end = file_size - 1
+                if start > end:
+                    # Невалидный диапазон - игнорируем
+                    start = 0
+                    end = None
+                else:
+                    self.status_code = 206
+            except (ValueError, IndexError):
+                # Невалидный Range - игнорируем
+                pass
+
+        # Формируем заголовки
         headers = dict(self.headers)
         headers["content-type"] = self._media_type
         headers["content-disposition"] = f'attachment; filename="{self.filename}"'
-
-        stat_result = await anyio.to_thread.run_sync(os.stat, self.path)
-        self._file_size = stat_result.st_size
-        headers["content-length"] = str(self._file_size)
-
-        last_modified = stat_result.st_mtime
+        headers["accept-ranges"] = "bytes"
         headers["last-modified"] = email.utils.formatdate(last_modified, usegmt=True)
+
+        # Вычисляем длину контента
+        if end is not None:
+            content_length = end - start + 1
+            headers["content-range"] = f"bytes {start}-{end}/{file_size}"
+        else:
+            content_length = file_size - start
+
+        headers["content-length"] = str(content_length)
 
         encoded_headers = [(k.encode(), v.encode()) for k, v in headers.items()]
 
@@ -206,16 +259,27 @@ class FileResponse(Response):
             "headers": encoded_headers,
         })
 
-        async with await anyio.open_file(self.path, "rb") as f:
-            while True:
-                chunk = await f.read(self.chunk_size)
-                if not chunk:
-                    break
-                await send({
-                    "type": "http.response.body",
-                    "body": chunk,
-                    "more_body": True,
-                })
+        # Читаем и отправляем файл
+        try:
+            async with await anyio.open_file(self.path, "rb") as f:
+                if start > 0:
+                    await f.seek(start)
+
+                remaining = content_length
+                while remaining > 0:
+                    chunk_size = min(self.chunk_size, remaining)
+                    chunk = await f.read(chunk_size)
+                    if not chunk:
+                        break
+                    await send({
+                        "type": "http.response.body",
+                        "body": chunk,
+                        "more_body": True,
+                    })
+                    remaining -= len(chunk)
+        except (FileNotFoundError, PermissionError):
+            # Файл был удалён или доступ запрещён во время чтения
+            pass
 
         await send({
             "type": "http.response.body",

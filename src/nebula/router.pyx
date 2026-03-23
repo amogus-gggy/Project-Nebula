@@ -49,15 +49,16 @@ cdef class Router:
 
         if path_key not in self.routes:
             self.routes[path_key] = {}
-            # Кэшируем информацию о паттерне при добавлении
+            # Cache pattern info at add time
             pattern_info = self._compile_pattern(path_key)
             self._pattern_cache[path_key] = pattern_info
-            # Проверяем, есть ли параметры в паттерне
+            # Check if pattern has parameters
+            has_params = False
             for item in pattern_info[0]:
                 if item is not None:
                     has_params = True
                     break
-            # Разделяем статические и динамические маршруты
+            # Separate static and dynamic routes
             if not has_params:
                 self._static_routes[path_key] = True
             else:
@@ -76,7 +77,8 @@ cdef class Router:
         if path not in self.websocket_routes:
             pattern_info = self._compile_pattern(path)
             self._pattern_cache[path] = pattern_info
-            # Проверяем, есть ли параметры в паттерне
+            # Check if pattern has parameters
+            has_params = False
             for item in pattern_info[0]:
                 if item is not None:
                     has_params = True
@@ -101,13 +103,13 @@ cdef class Router:
             str route_path
             list pattern_info
 
-        # Exact match first (быстрая проверка статических маршрутов)
+        # Exact match first (fast check for static routes)
         if path in self._static_routes:
             methods = self.routes[path]
             if method_upper in methods:
                 return (methods[method_upper], {})
 
-        # Pattern match (только по динамическим маршрутам)
+        # Pattern match (only for dynamic routes)
         for route_path in self._route_order:
             methods = self.routes[route_path]
             if method_upper not in methods:
@@ -144,9 +146,9 @@ cdef class Router:
         return (None, None)
 
     cdef list _compile_pattern(self, str pattern):
-        """Компилирует паттерн в оптимизированную структуру.
-        
-        Returns: [(param_name, converter) или None для статических частей]
+        """Compile pattern into optimized structure.
+
+        Returns: [(param_name, converter) or None for static parts]
         """
         cdef:
             list pattern_parts = pattern.strip("/").split("/")
@@ -168,12 +170,12 @@ cdef class Router:
                 converter = PATH_CONVERTERS[param_type]
                 compiled.append((param_name, converter))
             else:
-                compiled.append(None)  # Статическая часть
-        
+                compiled.append(None)  # Static part
+
         return [compiled, pattern_parts]
 
     cdef dict _match_path_fast(self, list pattern_info, str path):
-        """Быстрое сопоставление пути с предкомпилированным паттерном."""
+        """Fast path matching with precompiled pattern."""
         cdef:
             list compiled_pattern = pattern_info[0]
             list pattern_parts = pattern_info[1]
@@ -194,9 +196,9 @@ cdef class Router:
         for i in range(n):
             path_part = path_parts[i]
             param_info = compiled_pattern[i]
-            
+
             if param_info is not None:
-                # Динамический параметр
+                # Dynamic parameter
                 param_name = param_info[0]
                 converter = param_info[1]
                 try:
@@ -204,7 +206,7 @@ cdef class Router:
                 except (ValueError, TypeError):
                     return None
             elif pattern_parts[i] != path_part:
-                # Статическая часть не совпадает
+                # Static part mismatch
                 return None
 
         return path_params if path_params else None
