@@ -77,6 +77,36 @@ def test_sync_handler():
     print("✓ Sync handler OK")
 
 
+def test_random_async():
+    """Test async random number endpoint (2 requests)."""
+    results = []
+    for i in range(2):
+        resp = requests.get(f"{BASE_URL}/api/random/async")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "value" in data
+        assert data["type"] == "async"
+        assert 1 <= data["value"] <= 100
+        results.append(data["value"])
+        print(f"✓ Async random request {i+1}: {data['value']}")
+    print(f"  Results: {results}")
+
+
+def test_random_sync():
+    """Test sync random number endpoint (2 requests)."""
+    results = []
+    for i in range(2):
+        resp = requests.get(f"{BASE_URL}/api/random/sync")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "value" in data
+        assert data["type"] == "sync"
+        assert 1 <= data["value"] <= 100
+        results.append(data["value"])
+        print(f"✓ Sync random request {i+1}: {data['value']}")
+    print(f"  Results: {results}")
+
+
 def test_not_found():
     """Test 404 response."""
     resp = requests.get(f"{BASE_URL}/nonexistent")
@@ -150,6 +180,8 @@ async def main():
         test_item_by_name()
         test_score_by_float()
         test_sync_handler()
+        test_random_async()
+        test_random_sync()
         test_not_found()
         await test_websocket_echo()
         await test_websocket_chat_with_room()

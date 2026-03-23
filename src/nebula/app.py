@@ -1,7 +1,6 @@
 import asyncio
 import inspect
 import json
-import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Any, Dict, List, Optional
 
@@ -9,6 +8,7 @@ from .router import Router
 from .ws import WebSocket, WebSocketState
 
 _sync_executor = ThreadPoolExecutor(max_workers=10)
+
 
 class Request:
     def __init__(self, scope: Dict[str, Any], receive: Callable, path_params=None):
@@ -22,21 +22,29 @@ class Request:
             for k, v in scope.get("headers", [])
         }
         self.path_params = path_params or {}
+        self._body: Optional[bytes] = None
 
-    async def _get_body(self):
+    async def _get_body(self) -> bytes:
+        if self._body is not None:
+            return self._body
+
         messages = []
         while True:
             message = await self.receive()
             messages.append(message)
             if not message.get("more_body", False):
                 break
-        return b"".join(m.get("body", b"") for m in messages).decode()
+
+        self._body = b"".join(m.get("body", b"") for m in messages)
+        return self._body
 
     async def json(self):
-        return json.loads(await self._get_body())
+        body = await self._get_body()
+        return json.loads(body)
 
     async def text(self):
-        return await self._get_body()
+        body = await self._get_body()
+        return body.decode()
 
 
 
@@ -46,27 +54,33 @@ class Response:
         self.status_code = status_code
         self.headers = headers or {}
         self.media_type = media_type
+        self._encoded_headers: Optional[List[tuple]] = None
+        self._encoded_body: Optional[bytes] = None
 
     async def __call__(self, scope, receive, send):
         await send({
             "type": "http.response.start",
             "status": self.status_code,
-            "headers": self._encode_headers(),
+            "headers": self._get_encoded_headers(),
         })
 
         await send({
             "type": "http.response.body",
-            "body": self._encode_body(),
+            "body": self._get_encoded_body(),
         })
 
-    def _encode_headers(self):
-        headers = [(b"content-type", self.media_type.encode())]
-        for k, v in self.headers.items():
-            headers.append((k.encode(), v.encode()))
-        return headers
+    def _get_encoded_headers(self):
+        if self._encoded_headers is None:
+            headers = [(b"content-type", self.media_type.encode())]
+            for k, v in self.headers.items():
+                headers.append((k.encode(), v.encode()))
+            self._encoded_headers = headers
+        return self._encoded_headers
 
-    def _encode_body(self):
-        return self.content.encode() if isinstance(self.content, str) else self.content
+    def _get_encoded_body(self):
+        if self._encoded_body is None:
+            self._encoded_body = self.content.encode() if isinstance(self.content, str) else self.content
+        return self._encoded_body
 
 
 class JSONResponse(Response):
@@ -167,15 +181,15 @@ class Nebula:
             return await JSONResponse({"error": "Not Found"}, 404)(scope, receive, send)
 
         request = Request(scope, receive, params)
-        
+
         try:
             if inspect.iscoroutinefunction(handler):
                 response = await handler(request)
             else:
-                loop = asyncio.get_event_loop()
-                response = await loop.run_in_executor(
+                response = await asyncio.get_running_loop().run_in_executor(
                     _sync_executor,
-                    lambda: handler(request)
+                    handler,
+                    request,
                 )
 
             await response(scope, receive, send)
@@ -196,8 +210,7 @@ class Nebula:
             if inspect.iscoroutinefunction(handler):
                 await handler(websocket)
             else:
-                loop = asyncio.get_event_loop()
-                await loop.run_in_executor(_sync_executor, handler, websocket)
+                await asyncio.get_running_loop().run_in_executor(_sync_executor, handler, websocket)
 
         except Exception as e:
             try:

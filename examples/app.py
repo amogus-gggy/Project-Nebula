@@ -1,4 +1,5 @@
 from nebula import Nebula, JSONResponse, HTMLResponse, WebSocket
+import random
 
 app = Nebula()
 
@@ -42,6 +43,19 @@ async def get_score(request):
 @app.get("/api/sync")
 def sync_handler(request):
     return JSONResponse({"type": "sync", "message": "I'm synchronous!"})
+
+
+# Random number endpoints
+@app.get("/api/random/async")
+async def random_async(request):
+    """Async endpoint for generating random number."""
+    return JSONResponse({"value": random.randint(1, 100), "type": "async"})
+
+
+@app.get("/api/random/sync")
+def random_sync(request):
+    """Sync endpoint for generating random number."""
+    return JSONResponse({"value": random.randint(1, 100), "type": "sync"})
 
 
 # WebSocket echo endpoint
