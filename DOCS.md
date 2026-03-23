@@ -58,11 +58,7 @@ pip install project-nebula
 - Python >= 3.10
 - uvicorn >= 0.30.0
 - anyio >= 4.0.0
-
-### Optional
-
-- jinja2 >= 3.0.0 (для работы с шаблонами)
-
+- jinja2
 ### For Development
 
 ```bash
@@ -74,11 +70,7 @@ Installs additional dependencies:
 - httpx >= 0.27.0
 - cython >= 3.0.0
 
-### For Templates
 
-```bash
-pip install project-nebula[templates]
-```
 
 ---
 
@@ -98,8 +90,7 @@ async def home(request):
 
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    app.run(host="0.0.0.0", port=8000)
 ```
 
 ### Running
