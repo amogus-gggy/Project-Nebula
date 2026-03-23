@@ -77,6 +77,140 @@ def test_sync_handler():
     print("✓ Sync handler OK")
 
 
+def test_random_async():
+    """Test async random number endpoint (2 requests)."""
+    results = []
+    for i in range(2):
+        resp = requests.get(f"{BASE_URL}/api/random/async")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "value" in data
+        assert data["type"] == "async"
+        assert 1 <= data["value"] <= 100
+        results.append(data["value"])
+        print(f"✓ Async random request {i+1}: {data['value']}")
+    print(f"  Results: {results}")
+
+
+def test_random_sync():
+    """Test sync random number endpoint (2 requests)."""
+    results = []
+    for i in range(2):
+        resp = requests.get(f"{BASE_URL}/api/random/sync")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "value" in data
+        assert data["type"] == "sync"
+        assert 1 <= data["value"] <= 100
+        results.append(data["value"])
+        print(f"✓ Sync random request {i+1}: {data['value']}")
+    print(f"  Results: {results}")
+
+
+def test_plain_text_response():
+    """Test PlainTextResponse endpoint."""
+    resp = requests.get(f"{BASE_URL}/api/text")
+    assert resp.status_code == 200
+    assert resp.text == "This is a plain text response"
+    assert "text/plain" in resp.headers["Content-Type"]
+    print("✓ PlainTextResponse OK")
+
+
+def test_streaming_response():
+    """Test StreamingResponse endpoint."""
+    resp = requests.get(f"{BASE_URL}/api/stream")
+    assert resp.status_code == 200
+    expected = "".join([f"Line {i}\n" for i in range(10)])
+    assert resp.text == expected
+    print("✓ StreamingResponse OK")
+
+
+def test_redirect_response():
+    """Test RedirectResponse endpoint."""
+    resp = requests.get(f"{BASE_URL}/api/redirect", allow_redirects=False)
+    assert resp.status_code in [307, 301, 302]
+    assert resp.headers["Location"] == "https://example.com"
+    print("✓ RedirectResponse OK")
+
+
+def test_static_file():
+    """Test static file serving."""
+    resp = requests.get(f"{BASE_URL}/static/style.css")
+    assert resp.status_code == 200
+    assert "text/css" in resp.headers["Content-Type"] or "text/plain" in resp.headers["Content-Type"]
+    assert "Nebula Static" in resp.text or "body" in resp.text
+    print("✓ Static file OK")
+
+
+def test_static_file_not_found():
+    """Test static file 404."""
+    resp = requests.get(f"{BASE_URL}/static/nonexistent.css")
+    assert resp.status_code == 404
+    print("✓ Static file 404 OK")
+
+
+def test_template_response():
+    """Test Jinja2 template response."""
+    resp = requests.get(f"{BASE_URL}/template")
+    assert resp.status_code == 200
+    assert "Nebula Templates" in resp.text
+    assert "text/html" in resp.headers["Content-Type"]
+    assert "Logged in as: Guest" in resp.text
+    print("✓ TemplateResponse OK")
+
+
+def test_ping():
+    """Test ping endpoint."""
+    resp = requests.get(f"{BASE_URL}/api/ping")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "pong"
+    print("✓ Ping endpoint OK")
+
+
+def test_status():
+    """Test status endpoint."""
+    resp = requests.get(f"{BASE_URL}/api/status")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["healthy"] is True
+    assert "version" in data
+    print("✓ Status endpoint OK")
+
+
+def test_post_data():
+    """Test POST data endpoint."""
+    payload = {"key1": "value1", "key2": 123}
+    resp = requests.post(f"{BASE_URL}/api/data", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["received"] is True
+    assert set(data["keys"]) == {"key1", "key2"}
+    print("✓ POST data endpoint OK")
+
+
+def test_sum():
+    """Test sum endpoint."""
+    resp = requests.get(f"{BASE_URL}/api/sum/10/20")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["a"] == 10
+    assert data["b"] == 20
+    assert data["sum"] == 30
+    print("✓ Sum endpoint OK")
+
+
+def test_multiply():
+    """Test multiply endpoint."""
+    resp = requests.get(f"{BASE_URL}/api/multiply/2.5/4")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert abs(data["x"] - 2.5) < 0.01
+    assert abs(data["y"] - 4.0) < 0.01
+    assert abs(data["result"] - 10.0) < 0.01
+    print("✓ Multiply endpoint OK")
+
+
 def test_not_found():
     """Test 404 response."""
     resp = requests.get(f"{BASE_URL}/nonexistent")
@@ -143,6 +277,7 @@ async def main():
     try:
         print("Running tests...\n")
 
+        # HTTP tests
         test_home()
         test_hello()
         test_echo()
@@ -150,7 +285,30 @@ async def main():
         test_item_by_name()
         test_score_by_float()
         test_sync_handler()
+        test_random_async()
+        test_random_sync()
+        
+        # New response types tests
+        test_plain_text_response()
+        test_streaming_response()
+        test_redirect_response()
+        
+        # Static files and templates
+        test_static_file()
+        test_static_file_not_found()
+        test_template_response()
+        
+        # New benchmark endpoints
+        test_ping()
+        test_status()
+        test_post_data()
+        test_sum()
+        test_multiply()
+        
+        # Error handling
         test_not_found()
+        
+        # WebSocket tests
         await test_websocket_echo()
         await test_websocket_chat_with_room()
         await test_websocket_json()

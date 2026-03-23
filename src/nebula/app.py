@@ -1,124 +1,29 @@
 import asyncio
 import inspect
-import json
-import time
+import os
 from concurrent.futures import ThreadPoolExecutor
-from typing import Callable, Any, Dict, List, Optional
+from typing import List, Optional, Dict, Any, Union
+from pathlib import Path
 
 from .router import Router
-from .ws import WebSocket, WebSocketState
+from .ws import WebSocket
+from .request import Request
+from .responses import JSONResponse, FileResponse, PlainTextResponse
+from .middleware import Middleware, ASGIApp
 
 _sync_executor = ThreadPoolExecutor(max_workers=10)
-
-class Request:
-    def __init__(self, scope: Dict[str, Any], receive: Callable, path_params=None):
-        self.scope = scope
-        self.receive = receive
-        self.method = scope.get("method", "GET")
-        self.path = scope.get("path", "/")
-        self.query_string = scope.get("query_string", b"").decode()
-        self.headers = {
-            k.decode(): v.decode()
-            for k, v in scope.get("headers", [])
-        }
-        self.path_params = path_params or {}
-
-    async def _get_body(self):
-        messages = []
-        while True:
-            message = await self.receive()
-            messages.append(message)
-            if not message.get("more_body", False):
-                break
-        return b"".join(m.get("body", b"") for m in messages).decode()
-
-    async def json(self):
-        return json.loads(await self._get_body())
-
-    async def text(self):
-        return await self._get_body()
-
-
-
-class Response:
-    def __init__(self, content="", status_code=200, headers=None, media_type="text/plain"):
-        self.content = content
-        self.status_code = status_code
-        self.headers = headers or {}
-        self.media_type = media_type
-
-    async def __call__(self, scope, receive, send):
-        await send({
-            "type": "http.response.start",
-            "status": self.status_code,
-            "headers": self._encode_headers(),
-        })
-
-        await send({
-            "type": "http.response.body",
-            "body": self._encode_body(),
-        })
-
-    def _encode_headers(self):
-        headers = [(b"content-type", self.media_type.encode())]
-        for k, v in self.headers.items():
-            headers.append((k.encode(), v.encode()))
-        return headers
-
-    def _encode_body(self):
-        return self.content.encode() if isinstance(self.content, str) else self.content
-
-
-class JSONResponse(Response):
-    def __init__(self, content, status_code=200, headers=None):
-        super().__init__(
-            json.dumps(content),
-            status_code=status_code,
-            headers=headers,
-            media_type="application/json",
-        )
-
-
-class HTMLResponse(Response):
-    def __init__(self, content, status_code=200, headers=None):
-        super().__init__(
-            content,
-            status_code=status_code,
-            headers=headers,
-            media_type="text/html; charset=utf-8",
-        )
-
-
-
-class BaseMiddleware:
-    def __init__(self, app):
-        self.app = app
-
-    async def __call__(self, scope, receive, send):
-        await self.app(scope, receive, send)
-
-
-class Middleware:
-    def __init__(self, middleware_cls: type, **options):
-        self.middleware_cls = middleware_cls
-        self.options = options
-
-    def build(self, app):
-        return self.middleware_cls(app, **self.options)
-
-
-ASGIApp = Callable[[Dict, Callable, Callable], Any]
-
 
 
 class Nebula:
     def __init__(self, middleware: List[Middleware] = None):
         self._router = Router()
         self._middlewares = middleware or []
+        self._mounted_apps: Dict[str, Any] = {}
+        self._static_dirs: Dict[str, str] = {}
 
         self._core = self._build_core()
         self._app = self._build_middlewares(self._core)
-
+        self._sync_executor = _sync_executor
 
     def route(self, path, methods=None):
         methods = methods or ["GET"]
@@ -130,10 +35,17 @@ class Nebula:
 
         return decorator
 
-    def get(self, path): return self.route(path, ["GET"])
-    def post(self, path): return self.route(path, ["POST"])
-    def put(self, path): return self.route(path, ["PUT"])
-    def delete(self, path): return self.route(path, ["DELETE"])
+    def get(self, path):
+        return self.route(path, ["GET"])
+
+    def post(self, path):
+        return self.route(path, ["POST"])
+
+    def put(self, path):
+        return self.route(path, ["PUT"])
+
+    def delete(self, path):
+        return self.route(path, ["DELETE"])
 
     def websocket(self, path):
         def decorator(func):
@@ -142,6 +54,32 @@ class Nebula:
 
         return decorator
 
+    def mount(self, path: str, app: Any = None, directory: Union[str, os.PathLike] = None):
+        """
+        Подключить внешнее ASGI-приложение или директорию со статическими файлами.
+        
+        Args:
+            path: Префикс пути (например, "/static" или "/api")
+            app: ASGI-приложение для монтирования
+            directory: Путь к директории со статическими файлами
+        """
+        if app is not None:
+            self._mounted_apps[path] = app
+        elif directory is not None:
+            self._static_dirs[path] = str(directory)
+
+    def run(self, host: str = "127.0.0.1", port: int = 8000, reload: bool = False, **kwargs):
+        """
+        Запустить сервер uvicorn.
+        
+        Args:
+            host: Хост для прослушивания
+            port: Порт для прослушивания
+            reload: Авто-перезагрузка при изменении файлов
+            **kwargs: Дополнительные аргументы для uvicorn.run()
+        """
+        import uvicorn
+        uvicorn.run(self, host=host, port=port, reload=reload, **kwargs)
 
     def _build_core(self):
         async def app(scope, receive, send):
@@ -161,21 +99,45 @@ class Nebula:
         path = scope.get("path", "/")
         method = scope.get("method", "GET")
 
+        # Проверка смонтированных приложений
+        for mount_path, mounted_app in self._mounted_apps.items():
+            if path.startswith(mount_path):
+                new_scope = dict(scope)  # shallow copy to avoid mutation
+                new_scope["path"] = path[len(mount_path):] or "/"
+                return await mounted_app(new_scope, receive, send)
+
+        # Проверка статических директорий
+        for mount_path, directory in self._static_dirs.items():
+            if path.startswith(mount_path):
+                relative_path = path[len(mount_path):].lstrip("/")
+                file_path = os.path.join(directory, relative_path)
+
+                # Защита от выхода за пределы директории (используем realpath для разрешения symlink)
+                abs_directory = os.path.realpath(directory)
+                abs_file = os.path.realpath(file_path)
+
+                if abs_file.startswith(abs_directory) and os.path.isfile(abs_file):
+                    response = FileResponse(file_path)
+                    return await response(scope, receive, send)
+                else:
+                    response = JSONResponse({"error": "Not Found"}, 404)
+                    return await response(scope, receive, send)
+
         handler, params = self._router.find_handler(path, method)
 
         if not handler:
             return await JSONResponse({"error": "Not Found"}, 404)(scope, receive, send)
 
         request = Request(scope, receive, params)
-        
+
         try:
             if inspect.iscoroutinefunction(handler):
                 response = await handler(request)
             else:
-                loop = asyncio.get_event_loop()
-                response = await loop.run_in_executor(
-                    _sync_executor,
-                    lambda: handler(request)
+                response = await asyncio.get_running_loop().run_in_executor(
+                    self._sync_executor,
+                    handler,
+                    request,
                 )
 
             await response(scope, receive, send)
@@ -196,8 +158,11 @@ class Nebula:
             if inspect.iscoroutinefunction(handler):
                 await handler(websocket)
             else:
-                loop = asyncio.get_event_loop()
-                await loop.run_in_executor(_sync_executor, handler, websocket)
+                await asyncio.get_running_loop().run_in_executor(
+                    self._sync_executor,
+                    handler,
+                    websocket,
+                )
 
         except Exception as e:
             try:

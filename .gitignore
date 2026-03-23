@@ -34,3 +34,4 @@ htmlcov/
 .idea/
 .vscode/
 .vs/
+/examples/app_fastapi.py

@@ -1,6 +1,28 @@
-from nebula import Nebula, JSONResponse, HTMLResponse, WebSocket
+from nebula import (
+    Nebula,
+    JSONResponse,
+    HTMLResponse,
+    WebSocket,
+    PlainTextResponse,
+    StreamingResponse,
+    FileResponse,
+    RedirectResponse,
+    Jinja2Templates,
+)
+import random
+import os
 
 app = Nebula()
+
+# Mount static files directory
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+os.makedirs(static_dir, exist_ok=True)
+app.mount("/static", directory=static_dir)
+
+# Setup templates
+templates_dir = os.path.join(os.path.dirname(__file__), "templates")
+os.makedirs(templates_dir, exist_ok=True)
+templates = Jinja2Templates(directory=templates_dir)
 
 
 @app.get("/")
@@ -42,6 +64,19 @@ async def get_score(request):
 @app.get("/api/sync")
 def sync_handler(request):
     return JSONResponse({"type": "sync", "message": "I'm synchronous!"})
+
+
+# Random number endpoints
+@app.get("/api/random/async")
+async def random_async(request):
+    """Async endpoint for generating random number."""
+    return JSONResponse({"value": random.randint(1, 100), "type": "async"})
+
+
+@app.get("/api/random/sync")
+def random_sync(request):
+    """Sync endpoint for generating random number."""
+    return JSONResponse({"value": random.randint(1, 100), "type": "sync"})
 
 
 # WebSocket echo endpoint
@@ -208,7 +243,74 @@ async def broadcast(data: dict):
         active_connections.discard(conn)
 
 
-if __name__ == "__main__":
-    import uvicorn
+# New response types examples
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+@app.get("/api/text")
+async def text_response(request):
+    """PlainTextResponse example."""
+    return PlainTextResponse("This is a plain text response")
+
+
+@app.get("/api/stream")
+async def stream_response(request):
+    """StreamingResponse example."""
+    async def generate():
+        for i in range(10):
+            yield f"Line {i}\n"
+    return StreamingResponse(generate(), media_type="text/plain")
+
+
+@app.get("/api/redirect")
+async def redirect_response(request):
+    """RedirectResponse example."""
+    return RedirectResponse("https://example.com")
+
+
+@app.get("/template")
+async def template_response(request):
+    """Jinja2 template example."""
+    return templates.TemplateResponse(
+        "index.html",
+        {"request": request, "title": "Nebula Templates", "user": "Guest"}
+    )
+
+
+# Additional non-blocking endpoints for benchmark
+
+@app.get("/api/ping")
+async def ping(request):
+    """Simple ping endpoint."""
+    return JSONResponse({"status": "pong"})
+
+
+@app.get("/api/status")
+async def status(request):
+    """Status endpoint."""
+    return JSONResponse({"healthy": True, "version": "0.1.0"})
+
+
+@app.post("/api/data")
+async def post_data(request):
+    """POST data endpoint."""
+    data = await request.json()
+    return JSONResponse({"received": True, "keys": list(data.keys())})
+
+
+@app.get("/api/sum/{a:int}/{b:int}")
+async def sum_numbers(request):
+    """Sum two numbers."""
+    a = request.path_params["a"]
+    b = request.path_params["b"]
+    return JSONResponse({"a": a, "b": b, "sum": a + b})
+
+
+@app.get("/api/multiply/{x:float}/{y:float}")
+async def multiply(request):
+    """Multiply two floats."""
+    x = request.path_params["x"]
+    y = request.path_params["y"]
+    return JSONResponse({"x": x, "y": y, "result": x * y})
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000)

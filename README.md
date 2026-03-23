@@ -1,14 +1,22 @@
 # Nebula
 
-Simple ASGI micro framework for Python. 
+Simple ASGI micro framework for Python, which supports both http and websockets.
 
-#Update changelog:
-Added websockets(see examples folder)
+# Update changelog:
+Added app.run(), mount(), render_template(), Jinja2Templates
+Added new response types: PlainTextResponse, StreamingResponse, FileResponse, RedirectResponse
 
 ## Installation
 
 ```bash
 pip install project-nebula
+```
+
+### Optional Dependencies
+
+```bash
+# For templates
+pip install project-nebula[templates]
 ```
 
 ## Usage
@@ -60,10 +68,49 @@ def sync_handler(request):
     return JSONResponse({"type": "sync", "message": "I'm synchronous!"})
 
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+# New response types
+from nebula import PlainTextResponse, StreamingResponse, FileResponse, RedirectResponse
 
+@app.get("/text")
+async def text(request):
+    return PlainTextResponse("Plain text response")
+
+
+@app.get("/stream")
+async def stream(request):
+    async def generate():
+        for i in range(10):
+            yield f"Line {i}\n"
+    return StreamingResponse(generate())
+
+
+@app.get("/download")
+async def download(request):
+    return FileResponse("file.pdf", filename="download.pdf")
+
+
+@app.get("/redirect")
+async def redirect(request):
+    return RedirectResponse("https://example.com")
+
+
+# Mount static files
+app.mount("/static", directory="static")
+
+
+# Template rendering
+from nebula import Jinja2Templates
+templates = Jinja2Templates(directory="templates")
+
+
+@app.get("/template")
+async def template(request):
+    return templates.TemplateResponse("index.html", {"request": request, "title": "Home"})
+
+
+# Run server directly
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000, reload=True)
 ```
 
 ## Run
@@ -78,6 +125,12 @@ Or with uvicorn directly:
 uvicorn examples.app:app --reload
 ```
 
+Or using app.run():
+
+```bash
+python your_app.py
+```
+
 ## Features
 
 - ASGI compliant
@@ -85,3 +138,7 @@ uvicorn examples.app:app --reload
 - Path parameters support (`/users/{id}`)
 - Request body parsing (JSON, text)
 - Multiple HTTP methods (GET, POST, PUT, DELETE)
+- Static file mounting
+- Template rendering (Jinja2)
+- Multiple response types (PlainText, Streaming, File, Redirect)
+- Built-in server (app.run())

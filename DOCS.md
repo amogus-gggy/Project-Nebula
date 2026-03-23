@@ -11,10 +11,19 @@
   - [Nebula](#nebula)
   - [Request](#request)
   - [Response](#response)
+    - [JSONResponse](#jsonresponse)
+    - [HTMLResponse](#htmlresponse)
+    - [PlainTextResponse](#plaintextresponse)
+    - [StreamingResponse](#streamingresponse)
+    - [FileResponse](#fileresponse)
+    - [RedirectResponse](#redirectresponse)
   - [WebSocket](#websocket)
 - [Routing](#routing)
 - [WebSocket](#websocket-1)
 - [Middleware](#middleware)
+- [Mounting Static Files and Applications](#mounting-static-files-and-applications)
+- [Template Rendering](#template-rendering)
+- [Running the Server](#running-the-server)
 - [Examples](#examples)
 - [Testing](#testing)
 - [Development](#development)
@@ -31,6 +40,10 @@
 - ✅ Sync and async handlers
 - ✅ Full WebSocket support
 - ✅ Optimized Cython router
+- ✅ Static file mounting
+- ✅ Template rendering (Jinja2)
+- ✅ Multiple response types (Streaming, File, Redirect, PlainText)
+- ✅ Built-in `app.run()` server
 
 ---
 
@@ -44,7 +57,8 @@ pip install project-nebula
 
 - Python >= 3.10
 - uvicorn >= 0.30.0
-
+- anyio >= 4.0.0
+- jinja2
 ### For Development
 
 ```bash
@@ -55,6 +69,8 @@ Installs additional dependencies:
 - pytest >= 8.0.0
 - httpx >= 0.27.0
 - cython >= 3.0.0
+
+
 
 ---
 
@@ -74,8 +90,7 @@ async def home(request):
 
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    app.run(host="0.0.0.0", port=8000)
 ```
 
 ### Running
@@ -177,6 +192,49 @@ async def home(request):
 - `content` — HTML content
 - `status_code` — status code (default 200)
 - `headers` — headers (optional)
+
+#### PlainTextResponse
+
+```python
+from nebula import PlainTextResponse
+
+@app.get("/text")
+async def text(request):
+    return PlainTextResponse("Hello, World!")
+```
+
+#### StreamingResponse
+
+```python
+from nebula import StreamingResponse
+
+@app.get("/stream")
+async def stream(request):
+    async def generate():
+        for i in range(10):
+            yield f"Line {i}\n"
+    return StreamingResponse(generate())
+```
+
+#### FileResponse
+
+```python
+from nebula import FileResponse
+
+@app.get("/download")
+async def download(request):
+    return FileResponse("path/to/file.pdf", filename="myfile.pdf")
+```
+
+#### RedirectResponse
+
+```python
+from nebula import RedirectResponse
+
+@app.get("/redirect")
+async def redirect(request):
+    return RedirectResponse("https://example.com")
+```
 
 ---
 
@@ -361,6 +419,121 @@ app: Nebula = Nebula(middleware=[
     Middleware(TimingMiddleware)
 ])
 ```
+
+---
+
+## Mounting Static Files and Applications
+
+### Mount Static Directory
+
+```python
+from nebula import Nebula
+
+app = Nebula()
+
+# Mount static files
+app.mount("/static", directory="static")
+
+# Now files are served at /static/<filepath>
+# e.g., /static/css/style.css, /static/js/app.js
+```
+
+### Mount ASGI Application
+
+```python
+from nebula import Nebula
+
+app = Nebula()
+
+# Mount another ASGI app
+from some_module import sub_app
+app.mount("/api", app=sub_app)
+```
+
+---
+
+## Template Rendering
+
+Nebula supports Jinja2 templates for rendering HTML.
+
+### Using Jinja2Templates (Recommended)
+
+```python
+from nebula import Nebula, Jinja2Templates
+
+app = Nebula()
+templates = Jinja2Templates(directory="templates")
+
+
+@app.get("/")
+async def home(request):
+    return templates.TemplateResponse(
+        "index.html",
+        {"request": request, "title": "Home Page", "user": "John"}
+    )
+```
+
+### Using render_template Function
+
+```python
+from nebula import Nebula, HTMLResponse, render_template
+
+app = Nebula()
+
+
+@app.get("/")
+async def home(request):
+    html = render_template(
+        "index.html",
+        {"title": "Home", "user": "John"},
+        templates_directory="templates"
+    )
+    return HTMLResponse(html)
+```
+
+### Template Example (templates/index.html)
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ title }}</title>
+</head>
+<body>
+    <h1>Hello, {{ user }}!</h1>
+</body>
+</html>
+```
+
+**Note:** Install Jinja2 with `pip install jinja2` or `pip install project-nebula[templates]`
+
+---
+
+## Running the Server
+
+### Using app.run()
+
+```python
+from nebula import Nebula
+
+app = Nebula()
+
+
+@app.get("/")
+async def home(request):
+    return HTMLResponse("<h1>Hello!</h1>")
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000, reload=True)
+```
+
+### Parameters
+
+- `host` — Host to bind (default: "127.0.0.1")
+- `port` — Port to bind (default: 8000)
+- `reload` — Auto-reload on code changes (default: False)
+- `**kwargs` — Additional uvicorn.run() arguments
 
 ---
 
