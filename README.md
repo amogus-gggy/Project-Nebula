@@ -1,9 +1,8 @@
 # Nebula
 
-Simple ASGI micro framework for Python.
+Simple ASGI micro framework for Python, which supports both http and websockets.
 
 # Update changelog:
-Added websockets(see examples folder)
 Added app.run(), mount(), render_template(), Jinja2Templates
 Added new response types: PlainTextResponse, StreamingResponse, FileResponse, RedirectResponse
 
