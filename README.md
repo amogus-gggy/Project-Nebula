@@ -12,12 +12,6 @@ Added new response types: PlainTextResponse, StreamingResponse, FileResponse, Re
 pip install project-nebula
 ```
 
-### Optional Dependencies
-
-```bash
-# For templates
-pip install project-nebula[templates]
-```
 
 ## Usage
 
