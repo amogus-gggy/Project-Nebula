@@ -43,6 +43,8 @@ setup(
     ),
     python_requires=">=3.10",
     install_requires=[
-        "uvicorn>=0.30.0",
+        "uvicorn[standard]>=0.30.0",
+        "anyio>=4.0.0",
+        "jinja2>=3.0.0",
     ],
 )
