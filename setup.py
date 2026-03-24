@@ -17,7 +17,7 @@ extensions = [
 
 setup(
     name="project-nebula",
-    version="1.0.3",
+    version="1.1",
     author="vxiddev, amogus-gggy",
     description="Simple ASGI micro framework for Python",
     long_description=open("README.md", encoding="utf-8").read(),
