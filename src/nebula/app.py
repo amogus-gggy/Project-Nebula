@@ -11,7 +11,11 @@ from .request import Request
 from .responses import JSONResponse, FileResponse, PlainTextResponse
 from .middleware import Middleware, ASGIApp
 
-_sync_executor = ThreadPoolExecutor(max_workers=10)
+_sync_executor = ThreadPoolExecutor(max_workers=4)
+
+# Кэшированные 404 и 500 ответы для уменьшения аллокаций
+_NOT_FOUND_RESPONSE = JSONResponse({"error": "Not Found"}, 404)
+_ERROR_RESPONSE = JSONResponse({"error": "Internal Server Error"}, 500)
 
 
 class Nebula:
@@ -68,18 +72,28 @@ class Nebula:
         elif directory is not None:
             self._static_dirs[path] = str(directory)
 
-    def run(self, host: str = "127.0.0.1", port: int = 8000, reload: bool = False, **kwargs):
+    def run(self, host: str = "0.0.0.0", port: int = 8000, gc_optimize=True):
         """
         Запустить сервер uvicorn.
         
         Args:
             host: Хост для прослушивания
             port: Порт для прослушивания
-            reload: Авто-перезагрузка при изменении файлов
-            **kwargs: Дополнительные аргументы для uvicorn.run()
+            gc_optimize: оптимизировать ли garbage collector
         """
+        
+        if gc_optimize:
+            import gc
+            gc.collect(2)
+            gc.freeze()
+            allocs, gen1, gen2 = gc.get_threshold()
+            print(allocs, gen1, gen2)
+            allocs = 50000
+            gen1 = gen1 * 2
+            gen2 = gen2 * 2
+            gc.set_threshold(allocs, gen1, gen2)
         import uvicorn
-        uvicorn.run(self, host=host, port=port, reload=reload, **kwargs)
+        uvicorn.run(self, host=host, port=port, http="httptools", access_log=False)
 
     def _build_core(self):
         async def app(scope, receive, send):
@@ -120,13 +134,12 @@ class Nebula:
                     response = FileResponse(file_path)
                     return await response(scope, receive, send)
                 else:
-                    response = JSONResponse({"error": "Not Found"}, 404)
-                    return await response(scope, receive, send)
+                    return await _NOT_FOUND_RESPONSE(scope, receive, send)
 
         handler, params = self._router.find_handler(path, method)
 
         if not handler:
-            return await JSONResponse({"error": "Not Found"}, 404)(scope, receive, send)
+            return await _NOT_FOUND_RESPONSE(scope, receive, send)
 
         request = Request(scope, receive, params)
 
@@ -142,7 +155,7 @@ class Nebula:
 
             await response(scope, receive, send)
         except Exception as e:
-            await JSONResponse({"error": str(e)}, 500)(scope, receive, send)
+            await _ERROR_RESPONSE(scope, receive, send)
 
     async def _handle_ws(self, scope, receive, send):
         path = scope.get("path", "/")
