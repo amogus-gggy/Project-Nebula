@@ -2,6 +2,15 @@ import requests
 import sys
 import websockets
 
+DEFAULT_404_BODY: str = """
+    <head><title>404 Not Found</title></head>
+
+    <body>
+        <h1>Not Found</h1>
+        <p>The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.</p>
+    </body>
+"""
+
 import asyncio
 
 BASE_URL = "http://127.0.0.1:8000"
@@ -215,8 +224,7 @@ def test_not_found():
     """Test 404 response."""
     resp = requests.get(f"{BASE_URL}/nonexistent")
     assert resp.status_code == 404
-    data = resp.json()
-    assert data["error"] == "Not Found"
+    assert resp.content == bytes(DEFAULT_404_BODY.encode())
     print("✓ 404 response OK")
 
 

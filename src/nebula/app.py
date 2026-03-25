@@ -8,8 +8,9 @@ from pathlib import Path
 from .router import Router
 from .ws import WebSocket
 from .request import Request
-from .responses import JSONResponse, FileResponse, PlainTextResponse
+from .responses import JSONResponse, FileResponse, PlainTextResponse, HTMLResponse
 from .middleware import Middleware, ASGIApp
+from .default_templates import DEFAULT_404_BODY, DEFAULT_405_BODY, DEFAULT_500_BODY
 
 _sync_executor = ThreadPoolExecutor(max_workers=10)
 
@@ -120,14 +121,15 @@ class Nebula:
                     response = FileResponse(file_path)
                     return await response(scope, receive, send)
                 else:
-                    response = JSONResponse({"error": "Not Found"}, 404)
+                    # TODO: add logging 
+                    response = HTMLResponse(DEFAULT_404_BODY, 404)
                     return await response(scope, receive, send)
 
         handler, params = self._router.find_handler(path, method)
 
         if not handler:
-            return await JSONResponse({"error": "Not Found"}, 404)(scope, receive, send)
-
+            return await HTMLResponse(DEFAULT_404_BODY, 404)(scope, receive, send)
+            
         request = Request(scope, receive, params)
 
         try:
@@ -142,7 +144,8 @@ class Nebula:
 
             await response(scope, receive, send)
         except Exception as e:
-            await JSONResponse({"error": str(e)}, 500)(scope, receive, send)
+            print(f"\033[31mERROR:\033[37m {str(e)}\033[0m")
+            await HTMLResponse(DEFAULT_500_BODY, 500)(scope, receive, send)
 
     async def _handle_ws(self, scope, receive, send):
         path = scope.get("path", "/")

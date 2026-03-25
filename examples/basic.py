@@ -1,4 +1,5 @@
-from nebula import Nebula , HTMLResponse, Middleware, BaseMiddleware
+from nebula import Nebula , HTMLResponse, Middleware, BaseMiddleware, render_template, TemplateResponse
+from pathlib import Path
 import time
 
 class LoggingMiddleware(BaseMiddleware):
@@ -28,6 +29,10 @@ app: Nebula = Nebula(middleware=[
 @app.get("/")
 async def root(request):
     return HTMLResponse("<h1>Hello, world!</h1>")
+
+@app.get("/greet/{name:str}")
+async def greet(request) -> TemplateResponse:
+    return render_template("greet.html", templates_directory=Path(__file__).resolve().parent / "templates", name=request.path_params["name"]) # only works the in 1 directory above templates dir
 
 if __name__ == "__main__":
     import uvicorn
