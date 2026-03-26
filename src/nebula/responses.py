@@ -1,4 +1,4 @@
-import json
+import ujson
 import os
 import stat
 import typing
@@ -6,11 +6,22 @@ from typing import Any, Dict, List, Optional, Union, AsyncIterator, Callable
 
 import anyio
 
+# Предварительно закодированные заголовки для часто используемых media types
+_PRE_ENCODED_MEDIA_TYPES = {
+    "application/json": [(b"content-type", b"application/json")],
+    "text/plain; charset=utf-8": [(b"content-type", b"text/plain; charset=utf-8")],
+    "text/html; charset=utf-8": [(b"content-type", b"text/html; charset=utf-8")],
+}
+
 
 class _HeadersMixin:
     """Mixin for encoding HTTP headers."""
 
     def _encode_headers(self, media_type: str, headers: dict) -> List[tuple]:
+        # Используем предзакодированные заголовки если возможно
+        if not headers and media_type in _PRE_ENCODED_MEDIA_TYPES:
+            return _PRE_ENCODED_MEDIA_TYPES[media_type]
+
         result = [(b"content-type", media_type.encode())]
         for k, v in headers.items():
             result.append((k.encode(), v.encode()))
@@ -25,6 +36,12 @@ class Response(_HeadersMixin):
         self.media_type = media_type
         self._encoded_headers: Optional[List[tuple]] = None
         self._encoded_body: Optional[bytes] = None
+        # Предварительно кодируем тело если это bytes или str
+        if isinstance(content, bytes):
+            self._encoded_body = content
+        elif isinstance(content, str):
+            # UTF-8 для текста, latin-1 для совместимости
+            self._encoded_body = content.encode('utf-8')
 
     async def __call__(self, scope, receive, send):
         await send({
@@ -36,6 +53,7 @@ class Response(_HeadersMixin):
         await send({
             "type": "http.response.body",
             "body": self._get_encoded_body(),
+            "more_body": False,  # ← КРИТИЧНО для ASGI
         })
 
     def _get_encoded_headers(self):
@@ -45,18 +63,21 @@ class Response(_HeadersMixin):
 
     def _get_encoded_body(self):
         if self._encoded_body is None:
-            self._encoded_body = self.content.encode() if isinstance(self.content, str) else self.content
+            self._encoded_body = self.content.encode('utf-8') if isinstance(self.content, str) else self.content
         return self._encoded_body
 
 
 class JSONResponse(Response):
     def __init__(self, content, status_code=200, headers=None):
+        # Сериализуем в JSON и сразу кодируем в bytes (JSON всегда ASCII-safe)
+        json_bytes = ujson.dumps(content).encode('latin-1')
         super().__init__(
-            json.dumps(content),
+            json_bytes,
             status_code=status_code,
             headers=headers,
             media_type="application/json",
         )
+        # _encoded_body уже установлен в суперклассе
 
 
 class HTMLResponse(Response):
@@ -71,6 +92,7 @@ class HTMLResponse(Response):
 
 class PlainTextResponse(Response):
     """Ответ с обычным текстом (text/plain)."""
+
     def __init__(self, content, status_code=200, headers=None):
         super().__init__(
             content,
@@ -82,6 +104,7 @@ class PlainTextResponse(Response):
 
 class RedirectResponse(Response):
     """Перенаправление на другой URL."""
+
     def __init__(self, url, status_code=307, headers=None):
         headers = headers or {}
         headers["location"] = url
@@ -95,12 +118,13 @@ class RedirectResponse(Response):
 
 class StreamingResponse(_HeadersMixin):
     """Потоковый ответ для передачи данных частями."""
+
     def __init__(
-        self,
-        content: Union[AsyncIterator[bytes], AsyncIterator[str], Callable],
-        status_code: int = 200,
-        headers: Optional[Dict[str, str]] = None,
-        media_type: str = "text/plain",
+            self,
+            content: Union[AsyncIterator[bytes], AsyncIterator[str], Callable],
+            status_code: int = 200,
+            headers: Optional[Dict[str, str]] = None,
+            media_type: str = "text/plain",
     ):
         self.content_iterator = content
         self.status_code = status_code
@@ -146,12 +170,12 @@ class FileResponse(Response):
     chunk_size = 64 * 1024
 
     def __init__(
-        self,
-        path: Union[str, os.PathLike],
-        status_code: int = 200,
-        headers: Optional[Dict[str, str]] = None,
-        media_type: Optional[str] = None,
-        filename: Optional[str] = None,
+            self,
+            path: Union[str, os.PathLike],
+            status_code: int = 200,
+            headers: Optional[Dict[str, str]] = None,
+            media_type: Optional[str] = None,
+            filename: Optional[str] = None,
     ):
         self.path = path
         self.filename = filename or os.path.basename(path)
