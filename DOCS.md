@@ -1,6 +1,6 @@
 # Nebula Documentation
 
-**Nebula** is a simple and lightweight ASGI micro-framework for Python with WebSocket support.
+**Nebula** — это простой и легковесный ASGI-микрофреймворк для Python с поддержкой WebSocket.
 
 ## Table of Contents
 
@@ -69,6 +69,7 @@ pip install project-nebula
 - uvicorn >= 0.30.0
 - anyio >= 4.0.0
 - jinja2
+
 ### For Development
 
 ```bash
@@ -80,8 +81,6 @@ Installs additional dependencies:
 - httpx >= 0.27.0
 - cython >= 3.0.0
 
-
-
 ---
 
 ## Quick Start
@@ -89,7 +88,8 @@ Installs additional dependencies:
 ### Minimal Application
 
 ```python
-from nebula import Nebula, JSONResponse
+from nebula import Nebula
+from nebula.http import JSONResponse
 
 app = Nebula()
 
@@ -155,6 +155,9 @@ app = Nebula(templates_directory="templates")
 HTTP request object passed to handlers.
 
 ```python
+from nebula.http import Request
+
+
 @app.get("/users/{id:int}")
 async def get_user(request: Request):
     ...
@@ -184,12 +187,15 @@ async def get_user(request: Request):
 Base HTTP response class.
 
 ```python
-from nebula import Response, JSONResponse, HTMLResponse
+from nebula.http import Response, JSONResponse, HTMLResponse
 ```
 
 #### JSONResponse
 
 ```python
+from nebula.http import JSONResponse
+
+
 @app.get("/api/data")
 async def get_data(request):
     return JSONResponse({"key": "value"}, status_code=200)
@@ -203,6 +209,9 @@ async def get_data(request):
 #### HTMLResponse
 
 ```python
+from nebula.http import HTMLResponse
+
+
 @app.get("/")
 async def home(request):
     return HTMLResponse("<h1>Welcome!</h1>")
@@ -216,7 +225,8 @@ async def home(request):
 #### PlainTextResponse
 
 ```python
-from nebula import PlainTextResponse
+from nebula.http import PlainTextResponse
+
 
 @app.get("/text")
 async def text(request):
@@ -226,7 +236,8 @@ async def text(request):
 #### StreamingResponse
 
 ```python
-from nebula import StreamingResponse
+from nebula.http import StreamingResponse
+
 
 @app.get("/stream")
 async def stream(request):
@@ -239,7 +250,8 @@ async def stream(request):
 #### FileResponse
 
 ```python
-from nebula import FileResponse
+from nebula.http import FileResponse
+
 
 @app.get("/download")
 async def download(request):
@@ -249,7 +261,8 @@ async def download(request):
 #### RedirectResponse
 
 ```python
-from nebula import RedirectResponse
+from nebula.http import RedirectResponse
+
 
 @app.get("/redirect")
 async def redirect(request):
@@ -263,7 +276,8 @@ async def redirect(request):
 WebSocket connection handler.
 
 ```python
-from nebula import WebSocket
+from nebula.websocket import WebSocket
+
 
 @app.websocket("/ws/echo")
 async def echo(ws: WebSocket):
@@ -289,7 +303,7 @@ async def echo(ws: WebSocket):
 #### States
 
 ```python
-from nebula import WebSocketState
+from nebula.websocket import WebSocketState
 
 # WebSocketState.CONNECTING — connection establishing
 # WebSocketState.CONNECTED — connection active
@@ -305,7 +319,8 @@ from nebula import WebSocketState
 Abstract base class for cache backends.
 
 ```python
-from nebula import CacheBackend
+from nebula.caching import CacheBackend
+
 
 class MyCache(CacheBackend):
     async def get(self, key: str) -> Optional[Any]:
@@ -337,7 +352,7 @@ class MyCache(CacheBackend):
 In-memory cache backend implementation.
 
 ```python
-from nebula import InMemoryCache
+from nebula.caching import InMemoryCache
 
 cache = InMemoryCache(max_size=1000)
 ```
@@ -352,7 +367,7 @@ cache = InMemoryCache(max_size=1000)
 Manager for cache backends.
 
 ```python
-from nebula import CacheManager, InMemoryCache
+from nebula.caching import CacheManager, InMemoryCache
 
 # Set default backend
 CacheManager.set_default_backend(InMemoryCache())
@@ -381,7 +396,9 @@ backend = CacheManager.get_backend("redis")  # named
 Middleware for automatic HTTP response caching.
 
 ```python
-from nebula import CacheMiddleware, Middleware
+from nebula import Nebula
+from nebula.middleware import Middleware
+from nebula.caching import CacheMiddleware
 
 app = Nebula(middleware=[
     Middleware(CacheMiddleware, cache_timeout=300)
@@ -405,7 +422,8 @@ app = Nebula(middleware=[
 Decorator for caching function results.
 
 ```python
-from nebula import cache
+from nebula.caching import cache
+
 
 @app.get("/api/data")
 @cache(expires=3600)
@@ -425,9 +443,13 @@ async def get_data(request):
 ### Basic Routes
 
 ```python
+from nebula.http import JSONResponse, HTMLResponse
+
+
 @app.get("/")
 async def home(request):
     return HTMLResponse("<h1>Home</h1>")
+
 
 @app.post("/api/users")
 async def create_user(request):
@@ -440,21 +462,26 @@ async def create_user(request):
 Nebula supports automatic type conversion for path parameters:
 
 ```python
+from nebula.http import Request, JSONResponse
+
+
 # int parameter
 @app.get("/api/users/{id:int}")
-async def get_user(request):
+async def get_user(request: Request):
     user_id = request.path_params["id"]  # int
     return JSONResponse({"id": user_id})
 
+
 # str parameter
 @app.get("/api/items/{name:str}")
-async def get_item(request):
+async def get_item(request: Request):
     name = request.path_params["name"]  # str
     return JSONResponse({"name": name})
 
+
 # float parameter
 @app.get("/api/score/{value:float}")
-async def get_score(request):
+async def get_score(request: Request):
     value = request.path_params["value"]  # float
     return JSONResponse({"score": value})
 ```
@@ -474,6 +501,9 @@ def sync_handler(request):
 ### Basic Example
 
 ```python
+from nebula.websocket import WebSocket
+
+
 @app.websocket("/ws/echo")
 async def websocket_echo(ws: WebSocket):
     await ws.accept()
@@ -485,6 +515,9 @@ async def websocket_echo(ws: WebSocket):
 ### WebSocket with Path Parameters
 
 ```python
+from nebula.websocket import WebSocket
+
+
 @app.websocket("/ws/chat/{room:str}")
 async def websocket_chat(ws: WebSocket):
     room = ws.path_params["room"]
@@ -495,6 +528,9 @@ async def websocket_chat(ws: WebSocket):
 ### Iterating Over Messages
 
 ```python
+from nebula.websocket import WebSocket
+
+
 @app.websocket("/ws/stream")
 async def websocket_stream(ws: WebSocket):
     await ws.accept()
@@ -506,6 +542,9 @@ async def websocket_stream(ws: WebSocket):
 ### JSON Handling
 
 ```python
+from nebula.websocket import WebSocket
+
+
 @app.websocket("/ws/json")
 async def websocket_json(ws: WebSocket):
     await ws.accept()
@@ -521,18 +560,15 @@ async def websocket_json(ws: WebSocket):
 Nebula has middleware support:
 
 ```python
-class Middleware:
-    def __init__(self, middleware_cls: type, **options):
-        self.middleware_cls = middleware_cls
-        self.options = options
-
-    def build(self, app):
-        return self.middleware_cls(app, **self.options)
+from nebula.middleware import Middleware, BaseMiddleware
 ```
 
-where `self.middleware_cls` is a class which inherits from BaseMiddleware:
+where `BaseMiddleware` is a class which inherits from:
 
 ```python
+from nebula.middleware import BaseMiddleware
+
+
 class BaseMiddleware:
     def __init__(self, app):
         self.app = app
@@ -544,6 +580,10 @@ class BaseMiddleware:
 example middleware:
 
 ```python
+import time
+from nebula.middleware import BaseMiddleware
+
+
 class TimingMiddleware(BaseMiddleware):
     async def __call__(self, scope, receive, send):
         if scope["type"] == "lifespan":
@@ -557,7 +597,10 @@ class TimingMiddleware(BaseMiddleware):
 to use it:
 
 ```python
-app: Nebula = Nebula(middleware=[
+from nebula.app import Nebula
+from nebula.middleware import Middleware
+
+app = Nebula(middleware=[
     Middleware(TimingMiddleware)
 ])
 ```
@@ -573,7 +616,8 @@ Nebula has built-in caching support with a flexible backend system.
 The simplest way to enable caching:
 
 ```python
-from nebula import Nebula, InMemoryCache, cache
+from nebula import Nebula
+from nebula.caching import InMemoryCache, cache
 
 app = Nebula(
     cache_backend=InMemoryCache(max_size=1000),
@@ -584,7 +628,7 @@ app = Nebula(
 @app.get("/api/data")
 @cache(expires=3600)
 async def get_data(request):
-    return JSONResponse({"data": "cached for 1 hour"})
+    return JSONResponse({"data": "cached"})
 ```
 
 ### Cache Backends
@@ -592,7 +636,7 @@ async def get_data(request):
 Nebula supports multiple cache backends. By default, it uses `InMemoryCache`.
 
 ```python
-from nebula import InMemoryCache, CacheManager
+from nebula.caching import InMemoryCache, CacheManager
 
 # Set default cache backend (if not using cache_backend in Nebula)
 CacheManager.set_default_backend(InMemoryCache(max_size=1000))
@@ -606,7 +650,9 @@ CacheManager.register_backend("redis", MyRedisCache())
 The simplest way to cache a function result:
 
 ```python
-from nebula import Nebula, JSONResponse, cache, InMemoryCache
+from nebula import Nebula
+from nebula.http import JSONResponse
+from nebula.caching import cache, InMemoryCache
 
 app = Nebula(cache_backend=InMemoryCache())
 
@@ -630,7 +676,9 @@ CacheMiddleware is automatically added when you specify `cache_backend` in `Nebu
 For manual configuration:
 
 ```python
-from nebula import Nebula, Middleware, CacheMiddleware, InMemoryCache, cache
+from nebula import Nebula
+from nebula.middleware import Middleware
+from nebula.caching import CacheMiddleware, InMemoryCache, cache
 
 app = Nebula(middleware=[
     Middleware(CacheMiddleware, cache_timeout=300, backend=InMemoryCache())
@@ -648,7 +696,8 @@ async def get_user(request):
 Alternative way to register cached routes:
 
 ```python
-from nebula import Nebula, InMemoryCache
+from nebula import Nebula
+from nebula.caching import InMemoryCache
 
 app = Nebula(cache_backend=InMemoryCache(), cache_timeout=300)
 
@@ -663,7 +712,9 @@ async def get_data(request):
 To create a custom cache backend, inherit from `CacheBackend`:
 
 ```python
-from nebula import CacheBackend
+from typing import Any, Optional
+from nebula.caching import CacheBackend
+
 
 class RedisCache(CacheBackend):
     async def get(self, key: str):
@@ -745,7 +796,8 @@ app = Nebula(templates_directory="templates")
 ### Using Jinja2Templates (Recommended)
 
 ```python
-from nebula import Nebula, Jinja2Templates
+from nebula import Nebula
+from nebula.templating import Jinja2Templates
 
 app = Nebula(templates_directory="templates")
 templates = Jinja2Templates(directory="templates")
@@ -762,7 +814,8 @@ async def home(request):
 ### Using render_template Function
 
 ```python
-from nebula import Nebula, render_template
+from nebula import Nebula
+from nebula.templating import render_template
 
 app = Nebula(templates_directory="templates")
 
@@ -826,7 +879,9 @@ if __name__ == "__main__":
 ### Full Application
 
 ```python
-from nebula import Nebula, JSONResponse, HTMLResponse, WebSocket
+from nebula import Nebula
+from nebula.http import JSONResponse, HTMLResponse
+from nebula.websocket import WebSocket
 
 app = Nebula()
 
@@ -928,25 +983,37 @@ Project-Nebula/
 └── setup.py                     # Setup script
 ```
 
-### Alternative Imports (from subpackages)
+### Recommended Imports (from subpackages)
 
-You can also import directly from subpackages for better organization:
+For better organization and to avoid deprecation warnings, import from subpackages (except Nebula):
 
 ```python
+# Main application
+from nebula import Nebula
+
 # HTTP components
-from nebula.http import Request, Response, JSONResponse, HTMLResponse
+from nebula.http import Request, Response, JSONResponse, HTMLResponse, PlainTextResponse, StreamingResponse, FileResponse, RedirectResponse
 
 # WebSocket
 from nebula.websocket import WebSocket, WebSocketState
 
 # Templates
-from nebula.templating import Jinja2Templates, render_template
+from nebula.templating import Jinja2Templates, TemplateResponse, render_template
 
 # Caching
-from nebula.caching import cache, InMemoryCache, CacheMiddleware
+from nebula.caching import cache, InMemoryCache, CacheManager, CacheMiddleware, CacheBackend
 
 # Middleware
-from nebula.middleware import Middleware, BaseMiddleware
+from nebula.middleware import Middleware, BaseMiddleware, ASGIApp
+```
+
+### Deprecated Imports (still supported but not recommended)
+
+Direct imports from `nebula` are deprecated but still work with a warning:
+
+```python
+# Deprecated - will show DeprecationWarning
+from nebula import Request, JSONResponse, WebSocket, cache
 ```
 
 ### Building
@@ -977,3 +1044,5 @@ AGPLv3 License — see `LICENSE.txt` for details.
 
 - [GitHub Repository](https://github.com/amogus-gggy/project-nebula)
 - [PyPI Package](https://pypi.org/project/project-nebula/)
+
+---
