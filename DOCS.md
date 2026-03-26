@@ -18,9 +18,19 @@
     - [FileResponse](#fileresponse)
     - [RedirectResponse](#redirectresponse)
   - [WebSocket](#websocket)
+  - [Caching](#caching-api)
+    - [CacheBackend](#cachebackend)
+    - [InMemoryCache](#inmemorycache)
+    - [CacheManager](#cachemanager)
+    - [CacheMiddleware](#cachemiddleware)
+    - [@cache](#cache-decorator)
 - [Routing](#routing)
 - [WebSocket](#websocket-1)
 - [Middleware](#middleware)
+- [Caching](#caching)
+  - [Cache Backends](#cache-backends)
+  - [Using @cache Decorator](#using-cache-decorator)
+  - [Using CacheMiddleware](#using-cachemiddleware)
 - [Mounting Static Files and Applications](#mounting-static-files-and-applications)
 - [Template Rendering](#template-rendering)
 - [Running the Server](#running-the-server)
@@ -124,6 +134,8 @@ app = Nebula(templates_directory="templates")
 | `middleware` | `List[Middleware]` | List of middleware | `[]` |
 | `templates_directory` | `str` | Directory for Jinja2 templates | `"templates"` |
 | `static_directory` | `str` | Directory for static files (mounted at `/static`) | `None` |
+| `cache_backend` | `CacheBackend` | Cache backend instance (e.g., InMemoryCache) | `None` |
+| `cache_timeout` | `int` | Default cache timeout in seconds | `300` |
 
 #### Decorator Methods
 
@@ -286,6 +298,128 @@ from nebula import WebSocketState
 
 ---
 
+## Caching (API Reference)
+
+### CacheBackend
+
+Abstract base class for cache backends.
+
+```python
+from nebula import CacheBackend
+
+class MyCache(CacheBackend):
+    async def get(self, key: str) -> Optional[Any]:
+        ...
+
+    async def set(self, key: str, value: Any, expires: int = None) -> None:
+        ...
+
+    async def delete(self, key: str) -> None:
+        ...
+
+    async def clear(self) -> None:
+        ...
+```
+
+#### Methods
+
+| Method | Description |
+|--------|-------------|
+| `async get(key)` | Get value from cache |
+| `async set(key, value, expires)` | Set value in cache |
+| `async delete(key)` | Delete value from cache |
+| `async clear()` | Clear all cache |
+
+---
+
+### InMemoryCache
+
+In-memory cache backend implementation.
+
+```python
+from nebula import InMemoryCache
+
+cache = InMemoryCache(max_size=1000)
+```
+
+**Parameters:**
+- `max_size` — Maximum number of entries (default: 1000)
+
+---
+
+### CacheManager
+
+Manager for cache backends.
+
+```python
+from nebula import CacheManager, InMemoryCache
+
+# Set default backend
+CacheManager.set_default_backend(InMemoryCache())
+
+# Register named backend
+CacheManager.register_backend("redis", redis_cache)
+
+# Get backend
+backend = CacheManager.get_backend()  # default
+backend = CacheManager.get_backend("redis")  # named
+```
+
+#### Methods
+
+| Method | Description |
+|--------|-------------|
+| `set_default_backend(backend)` | Set default cache backend |
+| `get_default_backend()` | Get default cache backend |
+| `register_backend(name, backend)` | Register named backend |
+| `get_backend(name)` | Get backend by name |
+
+---
+
+### CacheMiddleware
+
+Middleware for automatic HTTP response caching.
+
+```python
+from nebula import CacheMiddleware, Middleware
+
+app = Nebula(middleware=[
+    Middleware(CacheMiddleware, cache_timeout=300)
+])
+```
+
+**Parameters:**
+- `cache_timeout` — Default cache TTL in seconds
+- `backend` — Cache backend instance
+
+#### Methods
+
+| Method | Description |
+|--------|-------------|
+| `register_handler(path, expires)` | Register route for caching |
+
+---
+
+### @cache Decorator
+
+Decorator for caching function results.
+
+```python
+from nebula import cache
+
+@app.get("/api/data")
+@cache(expires=3600)
+async def get_data(request):
+    return JSONResponse({"data": "cached"})
+```
+
+**Parameters:**
+- `expires` — Cache TTL in seconds (default: 300)
+- `key_prefix` — Prefix for cache key
+- `backend` — Cache backend name or instance
+
+---
+
 ## Routing
 
 ### Basic Routes
@@ -426,6 +560,127 @@ to use it:
 app: Nebula = Nebula(middleware=[
     Middleware(TimingMiddleware)
 ])
+```
+
+---
+
+## Caching
+
+Nebula has built-in caching support with a flexible backend system.
+
+### Quick Start
+
+The simplest way to enable caching:
+
+```python
+from nebula import Nebula, InMemoryCache, cache
+
+app = Nebula(
+    cache_backend=InMemoryCache(max_size=1000),
+    cache_timeout=300
+)
+
+
+@app.get("/api/data")
+@cache(expires=3600)
+async def get_data(request):
+    return JSONResponse({"data": "cached for 1 hour"})
+```
+
+### Cache Backends
+
+Nebula supports multiple cache backends. By default, it uses `InMemoryCache`.
+
+```python
+from nebula import InMemoryCache, CacheManager
+
+# Set default cache backend (if not using cache_backend in Nebula)
+CacheManager.set_default_backend(InMemoryCache(max_size=1000))
+
+# Or register named backends
+CacheManager.register_backend("redis", MyRedisCache())
+```
+
+### Using @cache Decorator
+
+The simplest way to cache a function result:
+
+```python
+from nebula import Nebula, JSONResponse, cache, InMemoryCache
+
+app = Nebula(cache_backend=InMemoryCache())
+
+
+@app.get("/api/data")
+@cache(expires=3600)  # Cache for 1 hour
+async def get_data(request):
+    # Expensive operation
+    return JSONResponse({"data": "cached for 1 hour"})
+```
+
+**Parameters:**
+- `expires` — Cache TTL in seconds (default: 300)
+- `key_prefix` — Prefix for cache key (optional)
+- `backend` — Cache backend name or instance (optional)
+
+### Using CacheMiddleware
+
+CacheMiddleware is automatically added when you specify `cache_backend` in `Nebula()`.
+
+For manual configuration:
+
+```python
+from nebula import Nebula, Middleware, CacheMiddleware, InMemoryCache, cache
+
+app = Nebula(middleware=[
+    Middleware(CacheMiddleware, cache_timeout=300, backend=InMemoryCache())
+])
+
+
+@app.get("/api/users/{id:int}")
+@cache(expires=3600)
+async def get_user(request):
+    return JSONResponse({"id": 1, "name": "John"})
+```
+
+### Using app.cache() Method
+
+Alternative way to register cached routes:
+
+```python
+from nebula import Nebula, InMemoryCache
+
+app = Nebula(cache_backend=InMemoryCache(), cache_timeout=300)
+
+
+@app.cache("/api/data", expires=3600)
+async def get_data(request):
+    return JSONResponse({"data": "cached"})
+```
+
+### Custom Cache Backend
+
+To create a custom cache backend, inherit from `CacheBackend`:
+
+```python
+from nebula import CacheBackend
+
+class RedisCache(CacheBackend):
+    async def get(self, key: str):
+        # Implement get logic
+        pass
+
+    async def set(self, key: str, value: Any, expires: int = None):
+        # Implement set logic
+        pass
+
+    async def delete(self, key: str):
+        # Implement delete logic
+        pass
+
+    async def clear(self):
+        # Implement clear logic
+        pass
 ```
 
 ---
@@ -646,16 +901,52 @@ python test_app.py
 Project-Nebula/
 ├── src/
 │   └── nebula/
-│       ├── __init__.py
-│       ├── app.py        # Main application
-│       ├── router.pyx    # Cython router
-│       └── ws.py         # WebSocket support
+│       ├── __init__.py          # Main package exports
+│       ├── app.py               # Main application class
+│       ├── router.pyx           # Cython router
+│       ├── http/                # HTTP components
+│       │   ├── __init__.py
+│       │   ├── request.py       # Request handling
+│       │   └── responses.py     # Response classes
+│       ├── websocket/           # WebSocket support
+│       │   ├── __init__.py
+│       │   └── ws.py
+│       ├── templating/          # Template rendering
+│       │   ├── __init__.py
+│       │   ├── templates.py     # Jinja2 templates
+│       │   └── default_templates.py
+│       ├── caching/             # Caching system
+│       │   ├── __init__.py
+│       │   └── cache.py
+│       └── middleware/          # Middleware support
+│           ├── __init__.py
+│           └── middleware.py
 ├── examples/
-│   └── app.py            # Usage examples
-|   └── basic.py
-├── test_app.py           # Tests
-├── pyproject.toml        # Build configuration
-└── setup.py              # Setup script
+│   └── app.py                   # Usage examples
+├── test_app.py                  # Tests
+├── pyproject.toml               # Build configuration
+└── setup.py                     # Setup script
+```
+
+### Alternative Imports (from subpackages)
+
+You can also import directly from subpackages for better organization:
+
+```python
+# HTTP components
+from nebula.http import Request, Response, JSONResponse, HTMLResponse
+
+# WebSocket
+from nebula.websocket import WebSocket, WebSocketState
+
+# Templates
+from nebula.templating import Jinja2Templates, render_template
+
+# Caching
+from nebula.caching import cache, InMemoryCache, CacheMiddleware
+
+# Middleware
+from nebula.middleware import Middleware, BaseMiddleware
 ```
 
 ### Building

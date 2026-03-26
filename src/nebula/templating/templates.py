@@ -5,7 +5,7 @@ import os
 from typing import Any, Dict, Optional, Union
 from pathlib import Path
 
-from .responses import HTMLResponse
+from ..http.responses import HTMLResponse
 
 
 # Глобальная переменная для хранения templates_directory по умолчанию

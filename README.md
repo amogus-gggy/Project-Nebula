@@ -125,6 +125,54 @@ Or using app.run():
 python your_app.py
 ```
 
+## Project Structure
+
+```
+nebula/
+├── __init__.py          # Main package exports (all common classes)
+├── app.py               # Main Nebula application class
+├── router.pyx           # Cython router (optimized)
+├── http/                # HTTP components
+│   ├── request.py       # Request handling
+│   └── responses.py     # Response classes (JSON, HTML, etc.)
+├── websocket/           # WebSocket support
+│   └── ws.py            # WebSocket class and state
+├── templating/          # Template rendering (Jinja2)
+│   ├── templates.py
+│   └── default_templates.py
+├── caching/             # Caching system
+│   └── cache.py
+└── middleware/          # Middleware support
+    └── middleware.py
+```
+
+### Alternative Imports
+
+You can import directly from subpackages:
+
+```python
+# HTTP components
+from nebula.http import Request, JSONResponse, HTMLResponse
+
+# WebSocket
+from nebula.websocket import WebSocket, WebSocketState
+
+# Templates
+from nebula.templating import Jinja2Templates, render_template
+
+# Caching
+from nebula.caching import cache, InMemoryCache
+
+# Middleware
+from nebula.middleware import Middleware, BaseMiddleware
+```
+
+Or use the convenient main exports:
+
+```python
+from nebula import Nebula, JSONResponse, HTMLResponse, WebSocket, cache
+```
+
 ## Features
 
 - ASGI compliant

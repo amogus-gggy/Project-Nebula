@@ -1,14 +1,20 @@
-from nebula import (
-    Nebula,
+"""
+Nebula Full Example Application
+
+Demonstrates all major features.
+"""
+from nebula import Nebula
+from nebula.http import (
     JSONResponse,
     HTMLResponse,
-    WebSocket,
     PlainTextResponse,
     StreamingResponse,
     FileResponse,
     RedirectResponse,
-    Jinja2Templates,
 )
+from nebula.websocket import WebSocket
+from nebula.templating import Jinja2Templates
+from nebula.caching import InMemoryCache, cache
 import random
 import os
 
@@ -19,10 +25,12 @@ os.makedirs(templates_dir, exist_ok=True)
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 os.makedirs(static_dir, exist_ok=True)
 
-# Create app with templates and static directories
+# Create app with templates, static directories and caching
 app = Nebula(
     templates_directory=templates_dir,
-    static_directory=static_dir
+    static_directory=static_dir,
+    cache_backend=InMemoryCache(max_size=1000),
+    cache_timeout=300
 )
 
 # Setup templates object for TemplateResponse
@@ -37,6 +45,16 @@ async def home(request):
 @app.get("/api/hello")
 async def hello(request):
     return JSONResponse({"message": "Hello, World!"})
+
+
+@app.get("/api/cached")
+@cache(expires=60)  # Кеш на 60 секунд
+async def cached_endpoint(request):
+    import time
+    return JSONResponse({
+        "message": "This response is cached for 60 seconds",
+        "timestamp": time.time()
+    })
 
 
 @app.post("/api/echo")

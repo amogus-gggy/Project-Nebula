@@ -5,15 +5,16 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional, Dict, Any, Union
 from pathlib import Path
 
-from .responses import HTMLResponse
+from .http.responses import HTMLResponse
 
 from .router import Router
-from .ws import WebSocket
-from .request import Request
-from .responses import JSONResponse, FileResponse, PlainTextResponse
-from .middleware import Middleware, ASGIApp
-from .default_templates import DEFAULT_404_BODY, DEFAULT_405_BODY, DEFAULT_500_BODY
-from .templates import Jinja2Templates, set_default_templates_directory
+from .websocket.ws import WebSocket
+from .http.request import Request
+from .http.responses import JSONResponse, FileResponse, PlainTextResponse
+from .middleware.middleware import Middleware, ASGIApp
+from .templating.default_templates import DEFAULT_404_BODY, DEFAULT_405_BODY, DEFAULT_500_BODY
+from .templating.templates import Jinja2Templates, set_default_templates_directory
+from .caching.cache import CacheMiddleware, CacheManager, InMemoryCache, cache as cache_decorator, CacheBackend
 
 _sync_executor = ThreadPoolExecutor(max_workers=10)
 
@@ -24,6 +25,8 @@ class Nebula:
         middleware: List[Middleware] = None,
         templates_directory: Union[str, os.PathLike] = "templates",
         static_directory: Optional[Union[str, os.PathLike]] = None,
+        cache_backend: Optional[CacheBackend] = None,
+        cache_timeout: int = 300,
     ):
         self._router = Router()
         self._middlewares = middleware or []
@@ -48,6 +51,15 @@ class Nebula:
         else:
             self._static_directory = None
 
+        # Инициализация кеширования (если указан бекенд)
+        self._cache_backend = cache_backend
+        if cache_backend is not None:
+            # Устанавливаем как бекенд по умолчанию
+            CacheManager.set_default_backend(cache_backend)
+            # Добавляем CacheMiddleware автоматически
+            self._middlewares.append(Middleware(CacheMiddleware, cache_timeout=cache_timeout))
+        self._cache_timeout = cache_timeout
+
     @property
     def templates(self) -> Jinja2Templates:
         """Возвращает объект Jinja2Templates для рендеринга шаблонов."""
@@ -57,6 +69,11 @@ class Nebula:
     def static_directory(self) -> Optional[str]:
         """Возвращает путь к директории статических файлов (если настроена)."""
         return self._static_directory
+
+    @property
+    def cache_backend(self) -> Optional[CacheBackend]:
+        """Возвращает бекенд кеширования (если настроен)."""
+        return self._cache_backend
 
     def route(self, path, methods=None):
         methods = methods or ["GET"]
@@ -84,6 +101,42 @@ class Nebula:
         def decorator(func):
             self._router.add_websocket_route(path, func)
             return func
+
+        return decorator
+
+    def cache(self, path: str, expires: int = 300):
+        """
+        Зарегистрировать маршрут для кеширования.
+
+        Args:
+            path: Путь маршрута
+            expires: Время жизни кеша в секундах
+
+        Пример:
+            app.cache("/api/data", expires=3600)
+
+            @app.get("/api/data")
+            async def get_data(request):
+                return JSONResponse({"data": "cached"})
+        """
+        # Находим CacheMiddleware и регистрируем хендлер
+        for mw in self._middlewares:
+            if mw.middleware_cls == CacheMiddleware:
+                # Получаем экземпляр middleware после build
+                pass
+
+        # Сохраняем в отдельный список для последующей регистрации
+        if not hasattr(self, "_cache_routes"):
+            self._cache_routes = []
+        self._cache_routes.append((path, expires))
+
+        def decorator(func):
+            # Добавляем маршрут как обычно
+            for m in ["GET"]:
+                self._router.add_route(path, m.upper(), func)
+
+            # Оборачиваем функцию в кеш
+            return cache_decorator(expires=expires)(func)
 
         return decorator
 
@@ -137,6 +190,17 @@ class Nebula:
     def _build_middlewares(self, app: ASGIApp) -> ASGIApp:
         for mw in reversed(self._middlewares):
             app = mw.build(app)
+
+        # Регистрируем cache routes после создания middleware
+        if hasattr(self, "_cache_routes"):
+            for mw in self._middlewares:
+                if mw.middleware_cls == CacheMiddleware:
+                    # Получаем экземпляр middleware
+                    middleware_instance = mw.build(app)
+                    for path, expires in self._cache_routes:
+                        middleware_instance.register_handler(path, expires)
+                    break
+
         return app
 
     async def _handle_http(self, scope, receive, send):

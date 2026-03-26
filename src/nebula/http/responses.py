@@ -53,7 +53,7 @@ class Response(_HeadersMixin):
         await send({
             "type": "http.response.body",
             "body": self._get_encoded_body(),
-            "more_body": False,  # ← КРИТИЧНО для ASGI
+            "more_body": False,  # КРИТИЧНО для ASGI
         })
 
     def _get_encoded_headers(self):
