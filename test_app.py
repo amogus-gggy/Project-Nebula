@@ -2,14 +2,7 @@ import requests
 import sys
 import websockets
 
-DEFAULT_404_BODY: str = """
-    <head><title>404 Not Found</title></head>
-
-    <body>
-        <h1>Not Found</h1>
-        <p>The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.</p>
-    </body>
-"""
+from nebula.templating import DEFAULT_404_BODY
 
 import asyncio
 
