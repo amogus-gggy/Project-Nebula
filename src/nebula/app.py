@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional, Dict, Any, Union
 from pathlib import Path
 
-from nebula import HTMLResponse
+from .responses import HTMLResponse
 
 from .router import Router
 from .ws import WebSocket
