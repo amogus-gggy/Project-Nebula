@@ -13,12 +13,18 @@ from .request import Request
 from .responses import JSONResponse, FileResponse, PlainTextResponse
 from .middleware import Middleware, ASGIApp
 from .default_templates import DEFAULT_404_BODY, DEFAULT_405_BODY, DEFAULT_500_BODY
+from .templates import Jinja2Templates, set_default_templates_directory
 
 _sync_executor = ThreadPoolExecutor(max_workers=10)
 
 
 class Nebula:
-    def __init__(self, middleware: List[Middleware] = None):
+    def __init__(
+        self,
+        middleware: List[Middleware] = None,
+        templates_directory: Union[str, os.PathLike] = "templates",
+        static_directory: Optional[Union[str, os.PathLike]] = None,
+    ):
         self._router = Router()
         self._middlewares = middleware or []
         self._mounted_apps: Dict[str, Any] = {}
@@ -27,6 +33,30 @@ class Nebula:
         self._core = self._build_core()
         self._app = self._build_middlewares(self._core)
         self._sync_executor = _sync_executor
+
+        # Инициализация шаблонов Jinja2
+        self._templates_directory = str(templates_directory)
+        self._templates = Jinja2Templates(self._templates_directory)
+
+        # Устанавливаем глобальную директорию шаблонов для render_template
+        set_default_templates_directory(self._templates_directory)
+
+        # Инициализация статической директории (если указана)
+        if static_directory is not None:
+            self._static_directory = str(static_directory)
+            self.mount("/static", directory=self._static_directory)
+        else:
+            self._static_directory = None
+
+    @property
+    def templates(self) -> Jinja2Templates:
+        """Возвращает объект Jinja2Templates для рендеринга шаблонов."""
+        return self._templates
+
+    @property
+    def static_directory(self) -> Optional[str]:
+        """Возвращает путь к директории статических файлов (если настроена)."""
+        return self._static_directory
 
     def route(self, path, methods=None):
         methods = methods or ["GET"]

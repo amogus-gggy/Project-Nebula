@@ -11,7 +11,7 @@ from .responses import (
 )
 from .middleware import BaseMiddleware, Middleware, ASGIApp
 from .ws import WebSocket, WebSocketState
-from .templates import Jinja2Templates, TemplateResponse, render_template
+from .templates import Jinja2Templates, TemplateResponse, render_template, set_default_templates_directory, get_default_templates_directory
 
 __version__ = "0.1.0"
 __all__ = [
@@ -32,4 +32,6 @@ __all__ = [
     "Jinja2Templates",
     "TemplateResponse",
     "render_template",
+    "set_default_templates_directory",
+    "get_default_templates_directory",
 ]

@@ -12,16 +12,20 @@ from nebula import (
 import random
 import os
 
-app = Nebula()
-
-# Mount static files directory
-static_dir = os.path.join(os.path.dirname(__file__), "static")
-os.makedirs(static_dir, exist_ok=True)
-app.mount("/static", directory=static_dir)
-
-# Setup templates
+# Setup templates and static directories
 templates_dir = os.path.join(os.path.dirname(__file__), "templates")
 os.makedirs(templates_dir, exist_ok=True)
+
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+os.makedirs(static_dir, exist_ok=True)
+
+# Create app with templates and static directories
+app = Nebula(
+    templates_directory=templates_dir,
+    static_directory=static_dir
+)
+
+# Setup templates object for TemplateResponse
 templates = Jinja2Templates(directory=templates_dir)
 
 

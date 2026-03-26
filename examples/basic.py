@@ -1,4 +1,4 @@
-from nebula import Nebula , HTMLResponse, Middleware, BaseMiddleware, render_template, TemplateResponse
+from nebula import Nebula, HTMLResponse, Middleware, BaseMiddleware, render_template, TemplateResponse
 from pathlib import Path
 import time
 
@@ -21,10 +21,18 @@ class TimingMiddleware(BaseMiddleware):
         await self.app(scope, receive, send)
         print(f"[TIME] {scope.get('path')} took {time.time() - start:.4f}s")
 
-app: Nebula = Nebula(middleware=[
-    Middleware(LoggingMiddleware),
-    Middleware(TimingMiddleware)
-])
+# Setup directories
+templates_dir = Path(__file__).resolve().parent / "templates"
+static_dir = Path(__file__).resolve().parent / "static"
+
+app: Nebula = Nebula(
+    templates_directory=templates_dir,
+    static_directory=static_dir,
+    middleware=[
+        Middleware(LoggingMiddleware),
+        Middleware(TimingMiddleware)
+    ]
+)
 
 @app.get("/")
 async def root(request):
@@ -32,7 +40,7 @@ async def root(request):
 
 @app.get("/greet/{name:str}")
 async def greet(request) -> TemplateResponse:
-    return render_template("greet.html", templates_directory=Path(__file__).resolve().parent / "templates", name=request.path_params["name"]) # only works the in 1 directory above templates dir
+    return render_template("greet.html", {"name": request.path_params["name"]})
 
 if __name__ == "__main__":
     import uvicorn

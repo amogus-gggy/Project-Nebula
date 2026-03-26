@@ -114,8 +114,16 @@ Main application class.
 ```python
 from nebula import Nebula
 
-app = Nebula()
+app = Nebula(templates_directory="templates")
 ```
+
+#### Constructor Parameters
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `middleware` | `List[Middleware]` | List of middleware | `[]` |
+| `templates_directory` | `str` | Directory for Jinja2 templates | `"templates"` |
+| `static_directory` | `str` | Directory for static files (mounted at `/static`) | `None` |
 
 #### Decorator Methods
 
@@ -424,17 +432,30 @@ app: Nebula = Nebula(middleware=[
 
 ## Mounting Static Files and Applications
 
-### Mount Static Directory
+### Automatic Static Files (Recommended)
+
+You can specify a static directory when creating the application. Files will be automatically served at `/static`:
+
+```python
+from nebula import Nebula
+
+app = Nebula(static_directory="static")
+
+# Files are automatically served at /static/<filepath>
+# e.g., /static/css/style.css, /static/js/app.js
+```
+
+### Manual Mount Static Directory
 
 ```python
 from nebula import Nebula
 
 app = Nebula()
 
-# Mount static files
+# Mount static files manually
 app.mount("/static", directory="static")
 
-# Now files are served at /static/<filepath>
+# Files are served at /static/<filepath>
 # e.g., /static/css/style.css, /static/js/app.js
 ```
 
@@ -456,12 +477,22 @@ app.mount("/api", app=sub_app)
 
 Nebula supports Jinja2 templates for rendering HTML.
 
+### Configuring Templates Directory
+
+You can specify the templates directory when creating the application:
+
+```python
+from nebula import Nebula
+
+app = Nebula(templates_directory="templates")
+```
+
 ### Using Jinja2Templates (Recommended)
 
 ```python
 from nebula import Nebula, Jinja2Templates
 
-app = Nebula()
+app = Nebula(templates_directory="templates")
 templates = Jinja2Templates(directory="templates")
 
 
@@ -476,19 +507,17 @@ async def home(request):
 ### Using render_template Function
 
 ```python
-from nebula import Nebula, HTMLResponse, render_template
+from nebula import Nebula, render_template
 
-app = Nebula()
+app = Nebula(templates_directory="templates")
 
 
 @app.get("/")
 async def home(request):
-    html = render_template(
+    return render_template(
         "index.html",
-        {"title": "Home", "user": "John"},
-        templates_directory="templates"
+        {"title": "Home", "user": "John"}
     )
-    return HTMLResponse(html)
 ```
 
 ### Template Example (templates/index.html)
