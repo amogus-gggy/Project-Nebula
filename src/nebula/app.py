@@ -5,17 +5,16 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional, Dict, Any, Union
 from pathlib import Path
 
+from nebula import HTMLResponse
+
 from .router import Router
 from .ws import WebSocket
 from .request import Request
 from .responses import JSONResponse, FileResponse, PlainTextResponse
 from .middleware import Middleware, ASGIApp
+from .default_templates import DEFAULT_404_BODY, DEFAULT_405_BODY, DEFAULT_500_BODY
 
-_sync_executor = ThreadPoolExecutor(max_workers=4)
-
-# Кэшированные 404 и 500 ответы для уменьшения аллокаций
-_NOT_FOUND_RESPONSE = JSONResponse({"error": "Not Found"}, 404)
-_ERROR_RESPONSE = JSONResponse({"error": "Internal Server Error"}, 500)
+_sync_executor = ThreadPoolExecutor(max_workers=10)
 
 
 class Nebula:
@@ -61,7 +60,7 @@ class Nebula:
     def mount(self, path: str, app: Any = None, directory: Union[str, os.PathLike] = None):
         """
         Подключить внешнее ASGI-приложение или директорию со статическими файлами.
-
+        
         Args:
             path: Префикс пути (например, "/static" или "/api")
             app: ASGI-приложение для монтирования
@@ -93,7 +92,8 @@ class Nebula:
             gen2 = gen2 * 2
             gc.set_threshold(allocs, gen1, gen2)
         import uvicorn
-        uvicorn.run(self, host=host, port=port, http="httptools", access_log=False)
+        #TODO: add access log disabling
+        uvicorn.run(self, host=host, port=port, http="httptools")
 
     def _build_core(self):
         async def app(scope, receive, send):
@@ -134,12 +134,14 @@ class Nebula:
                     response = FileResponse(file_path)
                     return await response(scope, receive, send)
                 else:
-                    return await _NOT_FOUND_RESPONSE(scope, receive, send)
+                    # TODO: add logging
+                    response = HTMLResponse(DEFAULT_404_BODY, 404)
+                    return await response(scope, receive, send)
 
         handler, params = self._router.find_handler(path, method)
 
         if not handler:
-            return await _NOT_FOUND_RESPONSE(scope, receive, send)
+            return await HTMLResponse(DEFAULT_404_BODY, 404)(scope, receive, send)
 
         request = Request(scope, receive, params)
 
@@ -155,7 +157,8 @@ class Nebula:
 
             await response(scope, receive, send)
         except Exception as e:
-            await _ERROR_RESPONSE(scope, receive, send)
+            print(f"\033[31mERROR:\033[37m {str(e)}\033[0m")
+            await HTMLResponse(DEFAULT_500_BODY, 500)(scope, receive, send)
 
     async def _handle_ws(self, scope, receive, send):
         path = scope.get("path", "/")

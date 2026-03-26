@@ -31,15 +31,16 @@ class Jinja2Templates:
         try:
             from jinja2 import Environment, FileSystemLoader
         except ImportError:
-            raise ImportError("Jinja2 не установлен. Установите: pip install jinja2")
+            raise ImportError("Jinja2 is not installed. Installation: pip install jinja2")
         
         self.directory = str(directory)
-        
-        # Настройки по умолчанию
+
+        # Default settings
         default_options = {
             "loader": FileSystemLoader(self.directory),
             "autoescape": True,
         }
+
         default_options.update(env_options)
         
         self.env = Environment(**default_options)
@@ -131,9 +132,8 @@ def render_template(
     
     templates = Environment(
         loader=FileSystemLoader(str(templates_directory)),
-        autoescape=True,
-        **jinja_options,
+        autoescape=True
     )
     
     template = templates.get_template(template_name)
-    return template.render(context or {})
+    return HTMLResponse(template.render(context or {}, **jinja_options))
