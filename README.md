@@ -1,4 +1,5 @@
 # Nebula
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/project-nebula?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/project-nebula)
 
 Simple ASGI micro framework for Python, which supports both HTTP and WebSockets.
 
