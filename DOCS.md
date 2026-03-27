@@ -443,7 +443,10 @@ async def get_data(request):
 ### Basic Routes
 
 ```python
+from nebula import Nebula
 from nebula.http import JSONResponse, HTMLResponse
+
+app = Nebula()
 
 
 @app.get("/")
@@ -489,6 +492,12 @@ async def get_score(request: Request):
 ### Synchronous Handlers
 
 ```python
+from nebula import Nebula
+from nebula.http import JSONResponse
+
+app = Nebula()
+
+
 @app.get("/api/sync")
 def sync_handler(request):
     return JSONResponse({"type": "sync"})
@@ -501,7 +510,10 @@ def sync_handler(request):
 ### Basic Example
 
 ```python
+from nebula import Nebula
 from nebula.websocket import WebSocket
+
+app = Nebula()
 
 
 @app.websocket("/ws/echo")
@@ -515,7 +527,10 @@ async def websocket_echo(ws: WebSocket):
 ### WebSocket with Path Parameters
 
 ```python
+from nebula import Nebula
 from nebula.websocket import WebSocket
+
+app = Nebula()
 
 
 @app.websocket("/ws/chat/{room:str}")
@@ -528,7 +543,10 @@ async def websocket_chat(ws: WebSocket):
 ### Iterating Over Messages
 
 ```python
+from nebula import Nebula
 from nebula.websocket import WebSocket
+
+app = Nebula()
 
 
 @app.websocket("/ws/stream")
@@ -542,7 +560,10 @@ async def websocket_stream(ws: WebSocket):
 ### JSON Handling
 
 ```python
+from nebula import Nebula
 from nebula.websocket import WebSocket
+
+app = Nebula()
 
 
 @app.websocket("/ws/json")
@@ -597,7 +618,7 @@ class TimingMiddleware(BaseMiddleware):
 to use it:
 
 ```python
-from nebula.app import Nebula
+from nebula import Nebula
 from nebula.middleware import Middleware
 
 app = Nebula(middleware=[
@@ -862,15 +883,14 @@ async def home(request):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000, reload=True)
+    app.run(host="0.0.0.0", port=8000)
 ```
 
 ### Parameters
 
-- `host` — Host to bind (default: "127.0.0.1")
+- `host` — Host to bind (default: "0.0.0.0")
 - `port` — Port to bind (default: 8000)
-- `reload` — Auto-reload on code changes (default: False)
-- `**kwargs` — Additional uvicorn.run() arguments
+- `gc_optimize` — Optimize garbage collector settings (default: True)
 
 ---
 

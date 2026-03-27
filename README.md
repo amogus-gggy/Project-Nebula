@@ -1,10 +1,14 @@
 # Nebula
 
-Simple ASGI micro framework for Python, which supports both http and websockets.
+Simple ASGI micro framework for Python, which supports both HTTP and WebSockets.
 
-# Update changelog:
-Added app.run(), mount(), render_template(), Jinja2Templates
-Added new response types: PlainTextResponse, StreamingResponse, FileResponse, RedirectResponse
+## Changelog
+
+### Version 1.1
+- Added caching system (`InMemoryCache`, `CacheMiddleware`, `@cache` decorator)
+- Improved `render_template()` and `Jinja2Templates` integration
+- Added automatic static file serving via `static_directory` parameter
+- Minor improvements for static and templates directory handling
 
 ## Installation
 
@@ -16,7 +20,8 @@ pip install project-nebula
 ## Usage
 
 ```python
-from nebula import Nebula, JSONResponse, HTMLResponse
+from nebula import Nebula
+from nebula.http import JSONResponse, HTMLResponse
 
 app = Nebula()
 
@@ -44,67 +49,15 @@ async def get_user(request):
     return JSONResponse({"id": user_id, "name": f"User {user_id}"})
 
 
-@app.get("/api/items/{name:str}")
-async def get_item(request):
-    name = request.path_params["name"]  # str
-    return JSONResponse({"name": name, "type": "item"})
-
-
-@app.get("/api/score/{value:float}")
-async def get_score(request):
-    value = request.path_params["value"]  # float
-    return JSONResponse({"score": value, "doubled": value * 2})
-
-
 # Sync handler example
 @app.get("/api/sync")
 def sync_handler(request):
     return JSONResponse({"type": "sync", "message": "I'm synchronous!"})
 
 
-# New response types
-from nebula import PlainTextResponse, StreamingResponse, FileResponse, RedirectResponse
-
-@app.get("/text")
-async def text(request):
-    return PlainTextResponse("Plain text response")
-
-
-@app.get("/stream")
-async def stream(request):
-    async def generate():
-        for i in range(10):
-            yield f"Line {i}\n"
-    return StreamingResponse(generate())
-
-
-@app.get("/download")
-async def download(request):
-    return FileResponse("file.pdf", filename="download.pdf")
-
-
-@app.get("/redirect")
-async def redirect(request):
-    return RedirectResponse("https://example.com")
-
-
-# Mount static files
-app.mount("/static", directory="static")
-
-
-# Template rendering
-from nebula import Jinja2Templates
-templates = Jinja2Templates(directory="templates")
-
-
-@app.get("/template")
-async def template(request):
-    return templates.TemplateResponse("index.html", {"request": request, "title": "Home"})
-
-
 # Run server directly
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000, reload=True)
+    app.run(host="0.0.0.0", port=8000)
 ```
 
 ## Run
@@ -128,31 +81,37 @@ python your_app.py
 ## Project Structure
 
 ```
-nebula/
-├── __init__.py          # Main package exports (all common classes)
+src/nebula/
+├── __init__.py          # Main package exports
 ├── app.py               # Main Nebula application class
 ├── router.pyx           # Cython router (optimized)
 ├── http/                # HTTP components
+│   ├── __init__.py
 │   ├── request.py       # Request handling
-│   └── responses.py     # Response classes (JSON, HTML, etc.)
+│   └── responses.py     # Response classes
 ├── websocket/           # WebSocket support
-│   └── ws.py            # WebSocket class and state
+│   ├── __init__.py
+│   └── ws.py
 ├── templating/          # Template rendering (Jinja2)
+│   ├── __init__.py
 │   ├── templates.py
 │   └── default_templates.py
 ├── caching/             # Caching system
+│   ├── __init__.py
 │   └── cache.py
 └── middleware/          # Middleware support
+    ├── __init__.py
     └── middleware.py
 ```
 
-### Alternative Imports
-
-You can import directly from subpackages:
+### Recommended Imports
 
 ```python
+# Main application
+from nebula import Nebula
+
 # HTTP components
-from nebula.http import Request, JSONResponse, HTMLResponse
+from nebula.http import Request, JSONResponse, HTMLResponse, PlainTextResponse, StreamingResponse, FileResponse, RedirectResponse
 
 # WebSocket
 from nebula.websocket import WebSocket, WebSocketState
@@ -161,26 +120,24 @@ from nebula.websocket import WebSocket, WebSocketState
 from nebula.templating import Jinja2Templates, render_template
 
 # Caching
-from nebula.caching import cache, InMemoryCache
+from nebula.caching import cache, InMemoryCache, CacheMiddleware
 
 # Middleware
 from nebula.middleware import Middleware, BaseMiddleware
-```
-
-Or use the convenient main exports:
-
-```python
-from nebula import Nebula, JSONResponse, HTMLResponse, WebSocket, cache
 ```
 
 ## Features
 
 - ASGI compliant
 - JSON and HTML responses
-- Path parameters support (`/users/{id}`)
+- Typed path parameters (`/users/{id:int}`, `{name:str}`, `{value:float}`)
 - Request body parsing (JSON, text)
 - Multiple HTTP methods (GET, POST, PUT, DELETE)
-- Static file mounting
+- Sync and async handlers
+- Full WebSocket support
+- Optimized Cython router
+- Static file mounting (automatic via `static_directory`)
 - Template rendering (Jinja2)
 - Multiple response types (PlainText, Streaming, File, Redirect)
-- Built-in server (app.run())
+- Built-in caching with `InMemoryCache`
+- Built-in server (`app.run()`)
