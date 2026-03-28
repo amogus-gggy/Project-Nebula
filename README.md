@@ -1,5 +1,6 @@
 # This project is deprecated, and you need to migrate to AltAPI. this version will not be maintained.
-PyPi: 
+
+PyPi: https://pypi.org/project/AltAPI
 
 Github: https://github.com/amogus-gggy/AltAPI
 
